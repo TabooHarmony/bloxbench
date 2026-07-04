@@ -245,6 +245,10 @@ class EvalMetrics:
     judge_issues: list = field(default_factory=list)
     screenshot_paths: list = field(default_factory=list)
     structure_dump: Optional[str] = None
+    created_scripts: dict = field(default_factory=dict)  # name -> source code
+    tool_call_sequence: list = field(default_factory=list)  # ordered tool names
+    time_breakdown: dict = field(default_factory=dict)  # {llm_ms, tool_ms, screenshot_ms, setup_ms}
+    final_response_text: Optional[str] = None  # model's last message
 
 
 # �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
@@ -990,6 +994,7 @@ return "ok"
                     m.total_time_ms = int((time.time() - t0) * 1000)
                     return m
 
+                m.time_breakdown["setup_ms"] = int((time.time() - t0) * 1000)
                 # 6. Build messages for LLM
                 messages = []
                 # Skills mode: use skill index as system prompt
@@ -1067,6 +1072,7 @@ return "ok"
                             tool_name = func["name"]
                             if tool_name not in m.tools_used:
                                 m.tools_used.append(tool_name)
+                            m.tool_call_sequence.append(tool_name)
                             # Count edit operations
                             if tool_name == "multi_edit":
                                 m.edit_count += 1
@@ -1123,10 +1129,13 @@ return "ok"
                             })
                     else:
                         # LLM finished (stop, length, or content)
+                        if message.get("content"):
+                            m.final_response_text = str(message["content"])[:2000]
                         break
 
                 m.llm_latency_ms = int((time.time() - llm_start) * 1000)
                 m.rounds_used = round_idx + 1
+                m.time_breakdown["llm_ms"] = m.llm_latency_ms
 
                 # 8. Take screenshot if requested
                 if run.screenshots:
@@ -1164,6 +1173,7 @@ return "ok"
                     except Exception as e:
                         logger.debug(f"  Screenshot failed: {e}")
 
+                _ss_start = time.time()
                 # 8b. Visual bench: camera framing + multi-screenshot (all angles captured for display, judge gets only first)
                 if ev.screenshot_type and m.scene_passed is not False:
                     try:
@@ -1239,6 +1249,7 @@ return string.format("%.1f|%.1f|%.1f|%.1f|%d", cx, cy, cz, maxDim, #parts)
                     except Exception as e:
                         logger.warning(f"  Visual bench screenshot failed: {e}")
 
+                m.time_breakdown["screenshot_ms"] = int((time.time() - _ss_start) * 1000)
                 # 8c. Structure dump
                 if ev.screenshot_type and m.scene_passed is not False:
                     try:
@@ -1291,6 +1302,48 @@ return result
                         m.structure_dump = (dump_text or "")[:5000]
                     except Exception as e:
                         logger.warning(f"  Structure dump failed: {e}")
+
+                # 8c2. Capture created scripts (for future code quality analysis)
+                if ev.screenshot_type and m.scene_passed is not False:
+                    try:
+                        scripts_lua = """
+local scripts = {}
+for _, obj in ipairs(game:GetDescendants()) do
+    if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+        if obj.Source and #obj.Source > 10 then
+            scripts[obj:GetFullName()] = obj.Source
+        end
+    end
+end
+-- Also check StarterPlayerScripts
+local StarterPlayer = game:GetService("StarterPlayer")
+if StarterPlayer then
+    for _, d in ipairs(StarterPlayer:GetDescendants()) do
+        if (d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript")) and d.Source and #d.Source > 10 then
+            scripts[d:GetFullName()] = d.Source
+        end
+    end
+end
+local count = 0
+local result = ""
+for name, src in pairs(scripts) do
+    count = count + 1
+    if count <= 10 then
+        result = result .. "=== " .. name .. " ===\n" .. src:sub(1, 500) .. "\n\n"
+    end
+end
+return tostring(count) .. "|" .. result
+"""
+                        _, scripts_text = await harness_call_tool(
+                            session, "execute_luau",
+                            {"datamodel_type": "Edit", "code": scripts_lua}, m
+                        )
+                        if scripts_text and "|" in scripts_text:
+                            parts = scripts_text.split("|", 1)
+                            m.created_scripts["_count"] = int(parts[0])
+                            m.created_scripts["_sources"] = parts[1][:10000]  # cap at 10K
+                    except Exception as e:
+                        logger.warning(f"  Script capture failed: {e}")
 
                 # 8d. Judge scoring (only send first screenshot to judge — 45° front angle)
                 if run.judge_enabled and run.judge and ev.judge_rubric and m.scene_passed is not False:
@@ -1465,6 +1518,10 @@ def aggregate_results(results: list[EvalMetrics], pass_n: int = 1) -> dict:
         "avg_judge_layout": round(sum(r.judge_scores.get("layout", 0) for r in results if r.judge_scores) / max(1, sum(1 for r in results if r.judge_scores)), 2) if any(r.judge_scores for r in results) else None,
         "avg_judge_aesthetics": round(sum(r.judge_scores.get("aesthetics", 0) for r in results if r.judge_scores) / max(1, sum(1 for r in results if r.judge_scores)), 2) if any(r.judge_scores for r in results) else None,
         "avg_judge_completeness": round(sum(r.judge_scores.get("completeness", 0) for r in results if r.judge_scores) / max(1, sum(1 for r in results if r.judge_scores)), 2) if any(r.judge_scores for r in results) else None,
+        "avg_tool_call_sequence_len": round(sum(len(r.tool_call_sequence) for r in results) / total, 1) if total else 0,
+        "avg_created_scripts": round(sum(r.created_scripts.get("_count", 0) for r in results) / total, 1) if total else 0,
+        "avg_time_llm": round(sum(r.time_breakdown.get("llm_ms", 0) for r in results) / total) if total else 0,
+        "avg_time_screenshot": round(sum(r.time_breakdown.get("screenshot_ms", 0) for r in results) / total) if total else 0,
         "error_breakdown": error_breakdown,
     }
 
