@@ -12,7 +12,8 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `primitives_0709_1353`: repeated dragon-only infrastructure failure; artifacts: `results_pull/primitives_0709_1353/`; no model construction
 - `primitives_0709_1402`: one-round diagnostic; artifacts: `results_pull/primitives_0709_1402/`; exposed the primitive trace regex bug, not benchmark data
 - `primitives_0709_1405`: clean dragon-only usage run; artifacts: `results_pull/primitives_0709_1405/`; P usage confirmed, 15 floating parts, 33 overlaps, not promoted
-- `primitives_0709_1411`: dragon-only origin-anchor follow-up; artifacts: `results_pull/primitives_0709_1411/`; 12 floating parts, 71 overlaps, not promoted
+- `primitives_0709_1411`: dragon-only origin-anchor follow-up; artifacts: `results_pull/primitives_0709_1411/`; 12 generic floating flags, 71 overlaps, not promoted
+- `anchor_calibration_0709_160219`: zero-token deterministic anchor test; artifacts: `results_pull/anchor_calibration_0709_160219/`; exact top, bottom, side, and back joins verified; generic horizontal-floating flags identified as evaluator false positives
 
 ## required entry format
 

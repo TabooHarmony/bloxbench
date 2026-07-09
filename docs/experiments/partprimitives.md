@@ -54,8 +54,20 @@ The smallest demonstrated API fix added explicit `P.limb` origin-face anchors. `
 - one harness `execute_luau` error was recovered without aborting the run
 - screenshots remained too dark and structurally cluttered for a quality pass
 
-The anchor fix reduced the floating-part count but increased overlaps and did not make the dragon visually coherent. Primitive adoption is proven. Primitive quality is not.
+## deterministic anchor calibration
+
+`anchor_calibration_0709_160219` tested the API without an LLM. The returned positions show exact face joins:
+
+- body top is `y=7.5`; `CalNeck_1` bottom is `y=7.5`
+- body bottom is `y=2.5`; `CalLeg_1` top is `y=2.5`
+- body left/right faces are `x=-5/+5`; the first wing inner faces land on those values
+- body back face is `z=-6`; `CalTail_1` starts at that face
+- subsequent segments continue from the previous segment endpoint
+
+The generic structural checker reported six floating parts, but all six were horizontal side/tail segments. The checker only recognizes vertical top support, so these are false positives for this calibration. The two floor/leg overlaps are intentional contact with the floor. The screenshot framing was partial, so the coordinate dump is the authoritative calibration result.
+
+The `P.limb` anchor implementation is therefore geometrically sound for the tested faces. The dragon failure is not evidence of a basic anchor-placement bug. It is now primarily a model composition/orientation/readability problem, with structural metrics that need better awareness of horizontal primitive links.
 
 ## current verdict
 
-Do not start the full ten-building run. The useful result is that the model does use `P.limb`, and the original top-only origin was a real API limitation, but the anchor extension is not sufficient evidence for benchmark promotion. Further geometry changes need a more direct trace of the model-authored code or a narrower construction task, not another blind full run.
+Do not start the full ten-building run. The API passed isolated anchor testing, but the dragon itself is still not a quality pass. Before another model run, improve the structural report for horizontal primitive links or define a narrower composition test.

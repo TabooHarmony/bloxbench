@@ -19,7 +19,7 @@ Measure whether the small `PartPrimitives` API improves connected Roblox constru
 ## next sequence
 
 1. preserve and index the dragon diagnostic and follow-up artifacts
-2. inspect or persist model-authored primitive code before changing geometry again
+2. add primitive-link awareness to the structural report without changing the existing generic metrics
 3. decide whether to stop the primitive arm or define one narrower construction test
 4. run the controlled 10-building primitive experiment only after a focused visual/structural pass succeeds
 5. review screenshots manually before comparing against vanilla
