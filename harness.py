@@ -270,6 +270,7 @@ class EvalMetrics:
     structure_dump: Optional[str] = None
     created_scripts: dict = field(default_factory=dict)  # name -> source code
     tool_call_sequence: list = field(default_factory=list)  # ordered tool names
+    primitive_calls_by_type: dict = field(default_factory=dict)  # model-authored P.* calls
     time_breakdown: dict = field(default_factory=dict)  # {llm_ms, tool_ms, screenshot_ms, setup_ms}
     final_response_text: Optional[str] = None  # model's last message
     fixer_report: Optional[str] = None  # StructuralFixer output log
@@ -1239,6 +1240,8 @@ return "ok"
                         "    door={w=3, h=4, side=\"center\"}})\n"
                         "-- pitched roof seats on wall\n"
                         "local roof = P.roof({20, 4, 12}, {name=\"Roof\", on=wall, style=\"pitched\", material=\"WoodPlanks\"})\n"
+                        "-- define a body before attaching chains\n"
+                        "local body = P.block({8, 5, 12}, {name=\"Body\", at={0, 3, 0}, material=\"Slate\"})\n"
                         "-- connected tail/branch chain (3 tapering segments, curving up)\n"
                         "local tail = P.limb({{4,3,3}, {3,2,2}, {2,1.5,1.5}}, {origin=body, angle=0, curve=15,\n"
                         "    name=\"Tail\", material=\"Slate\"})\n"
@@ -1252,6 +1255,9 @@ return "ok"
                         "Wall: `door={w,h,side}` cuts real gap (side: left/right/center) | `direction=\"x\"|\"z\"` | `windows={{w,h,y,side}}`.\n"
                         "Roof: `style=\"pitched\"|\"flat\"` | `direction=\"x\"|\"z\"` ridge axis | `overhang=N`.\n"
                         "Limb: `origin=<part>` start point | `angle=N` upward degrees | `yaw=N` horizontal | `curve=N` per-segment bend.\n"
+                        "Connection rule: if a part should touch another part, pass its actual return value through `on=` or `origin=`. "
+                        "Build dependency order as base/body, neck, head, then limb chains. Do not use free-standing `at=` for connected pieces. "
+                        "P.limb starts at the top of its origin; use `offset=` and a negative angle for side or downward attachments.\n"
                         "Stack: `levels={{w,h,d},...}` each level auto-seated on previous.\n\n"
                         "Use P.wall for walls with doors, P.roof for roofs, P.limb for tails/legs/branches/necks, "
                         "P.stack for towers/buildings. Use P.block/cyl/ball/wedge for simple parts. "
@@ -1336,6 +1342,13 @@ return "ok"
                             # Primitives: inject P into every execute_luau
                             if run.primitives_code and tool_name == "execute_luau":
                                 code = args.get("code", "") or ""
+                                # Record model-authored primitive calls before injecting
+                                # the local P require, so results show whether the model
+                                # actually used the intervention rather than merely having
+                                # the module uploaded.
+                                primitive_names = re.findall(r"\\bP\\.(floor|wall|roof|limb|stack|block|cyl|ball|wedge)\\s*\\(", code)
+                                for primitive_name in primitive_names:
+                                    m.primitive_calls_by_type[primitive_name] = m.primitive_calls_by_type.get(primitive_name, 0) + 1
                                 inject = "local P = require(game.ReplicatedStorage.PartPrimitives)\n"
                                 if code and "ReplicatedStorage.PartPrimitives" not in code:
                                     args = dict(args)
