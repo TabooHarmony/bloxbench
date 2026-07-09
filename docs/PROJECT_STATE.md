@@ -36,7 +36,7 @@ Recent primitive and harness patches have been applied. The important changes ar
 - run manifests record the experiment configuration
 - primitive constructor calls count as edits
 
-Local syntax checks passed. The clean dragon usage run `primitives_0709_1405` confirmed model-authored primitive adoption, but reported 15 floating parts and 33 overlaps. The origin-anchor follow-up `primitives_0709_1411` reduced floating parts to 12 but increased overlaps to 71, and its screenshots remained structurally cluttered and too dark for a quality pass. The zero-token calibration `anchor_calibration_0709_160219` verified exact top, bottom, side, and back face joins; the six horizontal floating flags were evaluator false positives. Neither dragon run validates the primitive arm as a benchmark improvement, but the anchor implementation itself passed isolation testing.
+Local syntax checks passed. The clean dragon usage run `primitives_0709_1405` confirmed model-authored primitive adoption, but reported 15 floating parts and 33 overlaps. The origin-anchor follow-up `primitives_0709_1411` reduced floating parts to 12 but increased overlaps to 71, and its screenshots remained structurally cluttered and too dark for a quality pass. The zero-token calibration `anchor_calibration_0709_160219` verified exact top, bottom, side, and back face joins; the six horizontal floating flags were evaluator false positives. The instrumented run `primitives_0709_1608` exposed duplicate chain segments after two model tool errors. The final clean-model-error run `primitives_0709_1621` had no model errors and no duplicate primitive names, but remained visually unacceptable with 14 generic floating flags, 77 overlaps, and `passed_cons=false`. The primitive arm is rejected for the full benchmark, while the anchor implementation passed isolation testing.
 
 ## source map
 
@@ -70,4 +70,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-Do not start the full ten-building experiment. The focused runs proved that the model adopts `P.*` constructors and the zero-token calibration proved that `P.limb` face anchors place tested chains correctly. Before another model run, either add primitive-link awareness to the structural report or define a narrower composition test. Do not treat the current generic floating count as a reliable score for horizontal limbs and tails.
+Do not start the full ten-building experiment with `PartPrimitives`. The zero-token calibration passed, but the final clean-model-error dragon run remained visually unacceptable despite zero model tool errors and zero duplicate primitive names. Preserve the arm as a rejected, reproducible experiment. Return to the broader benchmark only with a different intervention or a materially different task decomposition strategy.

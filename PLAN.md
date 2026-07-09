@@ -19,10 +19,10 @@ Measure whether the small `PartPrimitives` API improves connected Roblox constru
 ## next sequence
 
 1. preserve and index the dragon diagnostic and follow-up artifacts
-2. add primitive-link awareness to the structural report without changing the existing generic metrics
-3. decide whether to stop the primitive arm or define one narrower construction test
-4. run the controlled 10-building primitive experiment only after a focused visual/structural pass succeeds
-5. review screenshots manually before comparing against vanilla
+2. preserve the final clean dragon result and mark `PartPrimitives` as a rejected benchmark arm
+3. do not run the full 10-building primitive experiment
+4. choose a different intervention or task decomposition strategy before reopening the benchmark
+5. keep the primitive-link instrumentation for future controlled experiments
 
 ## active constraints
 

@@ -14,6 +14,9 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `primitives_0709_1405`: clean dragon-only usage run; artifacts: `results_pull/primitives_0709_1405/`; P usage confirmed, 15 floating parts, 33 overlaps, not promoted
 - `primitives_0709_1411`: dragon-only origin-anchor follow-up; artifacts: `results_pull/primitives_0709_1411/`; 12 generic floating flags, 71 overlaps, not promoted
 - `anchor_calibration_0709_160219`: zero-token deterministic anchor test; artifacts: `results_pull/anchor_calibration_0709_160219/`; exact top, bottom, side, and back joins verified; generic horizontal-floating flags identified as evaluator false positives
+- `primitives_0709_1608`: instrumented dragon follow-up; artifacts: `results_pull/primitives_0709_1608/`; duplicate chain segments after two model tool errors, contaminated and not promoted
+- `primitives_0709_1616`: near-clean instrumented dragon follow-up; artifacts: `results_pull/primitives_0709_1616/`; zero duplicate primitive names, 4 generic floating flags, 49 overlaps, one model tool error, not promoted
+- `primitives_0709_1621`: final clean-model-error follow-up; artifacts: `results_pull/primitives_0709_1621/`; zero model tool errors, zero duplicate primitive names, 14 generic floating flags, 77 overlaps, visually unacceptable, arm rejected
 
 ## required entry format
 

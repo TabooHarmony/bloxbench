@@ -1388,6 +1388,8 @@ return "ok"
                                     track_tool_error(m, func["name"], tool_is_err)
                                     if tool_is_err:
                                         logger.warning(f"[{ev.scenario_name}] tool {func['name']} returned error: {tool_out[:200]}")
+                                        if func["name"] == "execute_luau":
+                                            tool_out += "\nWARNING: execute_luau may have partially applied changes before failing. Inspect the workspace before retrying a full build."
                                 except Exception as e:
                                     err_str = str(e) or type(e).__name__
                                     logger.warning(f"[{ev.scenario_name}] tool {func['name']} failed: {err_str[:200]}")
@@ -1697,6 +1699,36 @@ for _, p in ipairs(parts) do
         p.Size.X, p.Size.Y, p.Size.Z, mat, tostring(p.Anchored))
 end
 
+-- Primitive-authored chain metadata complements the generic bbox heuristic.
+-- The latter only knows vertical top support and can flag valid horizontal
+-- wing/tail links as floating. Keep both reports for comparability.
+local primitiveLinks = {}
+local primitiveNameCounts = {}
+for _, p in ipairs(parts) do
+    if p:GetAttribute("PrimitiveKind") == "limb" then
+        local startPoint = p:GetAttribute("PrimitiveStartPoint")
+        local endPoint = p:GetAttribute("PrimitiveEndPoint")
+        primitiveNameCounts[p.Name] = (primitiveNameCounts[p.Name] or 0) + 1
+        table.insert(primitiveLinks, string.format(
+            "%s chain=%s segment=%s origin=%s anchor=%s start=%s end=%s",
+            p.Name,
+            tostring(p:GetAttribute("PrimitiveChain") or ""),
+            tostring(p:GetAttribute("PrimitiveSegment") or ""),
+            tostring(p:GetAttribute("PrimitiveOrigin") or ""),
+            tostring(p:GetAttribute("PrimitiveAnchor") or ""),
+            tostring(startPoint or ""),
+            tostring(endPoint or "")
+        ))
+    end
+end
+
+local primitiveDuplicates = {}
+for name, count in pairs(primitiveNameCounts) do
+    if count > 1 then
+        table.insert(primitiveDuplicates, name .. " x" .. tostring(count))
+    end
+end
+
 -- Structural soundness checks
 local floating = {}
 local overlaps = {}
@@ -1751,7 +1783,11 @@ flags = flags .. "overlaps:" .. #overlaps .. NL
 if #overlaps > 0 then flags = flags .. "  " .. summarize(overlaps, 50) .. NL end
 flags = flags .. "ground_contact:" .. tostring(groundContact) .. NL
 flags = flags .. "total_parts:" .. #parts .. NL
-return flags .. "parts:" .. #parts .. NL .. result
+local primitiveResult = "primitive_links:" .. #primitiveLinks .. NL
+if #primitiveLinks > 0 then primitiveResult = primitiveResult .. "  " .. summarize(primitiveLinks, 100) .. NL end
+primitiveResult = primitiveResult .. "primitive_duplicate_names:" .. #primitiveDuplicates .. NL
+if #primitiveDuplicates > 0 then primitiveResult = primitiveResult .. "  " .. summarize(primitiveDuplicates, 100) .. NL end
+return flags .. primitiveResult .. "parts:" .. #parts .. NL .. result
 """
                         dump_text = ""
                         for dump_attempt in range(3):

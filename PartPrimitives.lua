@@ -707,6 +707,7 @@ function P.limb(segments, opts)
     local angle = math.rad(opts.angle or 0)
     local yaw = math.rad(opts.yaw or 0)
     local curve = math.rad(opts.curve or 0)
+    local anchor = string.lower(tostring(opts.anchor or "top"))
 
     -- starting position: on the selected origin face
     local startX, startY, startZ
@@ -714,7 +715,6 @@ function P.limb(segments, opts)
         local tp, ts = opts.origin.Position, opts.origin.Size
         startX = tp.X
         startZ = tp.Z
-        local anchor = string.lower(tostring(opts.anchor or "top"))
         if anchor == "bottom" then
             startY = tp.Y - ts.Y * 0.5
         elseif anchor == "left" then
@@ -794,6 +794,17 @@ function P.limb(segments, opts)
             part.CFrame = applyRotation(part.CFrame, opts)
         end
 
+        -- Preserve the declared chain relationship for structural review.
+        -- These attributes do not affect placement or physics.
+        part:SetAttribute("PrimitiveKind", "limb")
+        part:SetAttribute("PrimitiveChain", opts.name or "Limb")
+        part:SetAttribute("PrimitiveSegment", i)
+        part:SetAttribute("PrimitiveAnchor", anchor)
+        if opts.origin then
+            part:SetAttribute("PrimitiveOrigin", opts.origin.Name)
+        end
+        part:SetAttribute("PrimitiveStartPoint", Vector3.new(prevX, prevY, prevZ))
+
         part.Parent = parent
 
         if not firstPart then firstPart = part end
@@ -802,6 +813,7 @@ function P.limb(segments, opts)
         prevX = cx + dirX * halfLen
         prevY = cy + dirY * halfLen
         prevZ = cz + dirZ * halfLen
+        part:SetAttribute("PrimitiveEndPoint", Vector3.new(prevX, prevY, prevZ))
 
         -- apply curve for next segment
         currentAngle = currentAngle + curve

@@ -66,8 +66,10 @@ The smallest demonstrated API fix added explicit `P.limb` origin-face anchors. `
 
 The generic structural checker reported six floating parts, but all six were horizontal side/tail segments. The checker only recognizes vertical top support, so these are false positives for this calibration. The two floor/leg overlaps are intentional contact with the floor. The screenshot framing was partial, so the coordinate dump is the authoritative calibration result.
 
-The `P.limb` anchor implementation is therefore geometrically sound for the tested faces. The dragon failure is not evidence of a basic anchor-placement bug. It is now primarily a model composition/orientation/readability problem, with structural metrics that need better awareness of horizontal primitive links.
+The latest clean-model-error run `primitives_0709_1621` had zero model tool errors and `primitive_duplicate_names=0`. It produced 32 primitive links from 10 limb calls, 54 total parts, ground contact, 14 generic floating flags, and 77 generic overlaps. The screenshots still show an almost-black cuboid statue with a weak silhouette, long stick-like limbs/tail, floating fragments, and no convincing dragon readability. `passed_cons=false` under the run's execution-only `--no-gate` mode.
+
+The near-clean run `primitives_0709_1616` was visually better and also had no duplicate primitive names, but it still had one model execute error and remained crude. The clean run removes the partial-execution explanation without rescuing the visual result.
 
 ## current verdict
 
-Do not start the full ten-building run. The API passed isolated anchor testing, but the dragon itself is still not a quality pass. Before another model run, improve the structural report for horizontal primitive links or define a narrower composition test.
+Do not promote `PartPrimitives` to the full benchmark arm. The zero-token calibration proves the anchor implementation works, and the clean dragon run proves duplicate execution was not the only problem. The remaining failure is model decomposition/composition and visual construction quality. Preserve the implementation and instrumentation as a reproducible rejected arm, but stop spending prompt or geometry iterations on this dragon path.
