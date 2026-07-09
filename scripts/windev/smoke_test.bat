@@ -10,8 +10,13 @@ taskkill /f /im RobloxCrashHandler.exe >nul 2>&1
 ping -n 4 127.0.0.1 >nul
 if exist "C:\Users\Admin\bloxbench\Places\baseplate.rbxl.lock" del /f /q "C:\Users\Admin\bloxbench\Places\baseplate.rbxl.lock" >nul 2>&1
 
-set STUDIO_EXE=C:\Program Files (x86)\Roblox\Versions\version-8b44d8f2067642d8\RobloxStudioBeta.exe
-set MCP_BAT=C:\Users\Admin\studio-mcp.bat
+set "STUDIO_EXE="
+for /f "delims=" %%i in ('dir /b /ad /o-n "%LOCALAPPDATA%\Roblox\Versions\version-*"') do if not defined STUDIO_EXE if exist "%LOCALAPPDATA%\Roblox\Versions\%%i\RobloxStudioBeta.exe" set "STUDIO_EXE=%LOCALAPPDATA%\Roblox\Versions\%%i\RobloxStudioBeta.exe"
+if not defined STUDIO_EXE (
+  echo ERROR: RobloxStudioBeta.exe not found under %LOCALAPPDATA%\Roblox\Versions
+  exit /b 1
+)
+set MCP_BAT=%USERPROFILE%\studio-mcp.bat
 set MODEL=cline-pass/deepseek-v4-flash
 
 echo ============================================
