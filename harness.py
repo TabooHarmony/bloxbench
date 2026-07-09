@@ -1355,7 +1355,7 @@ return "ok"
                                 # the local P require, so results show whether the model
                                 # actually used the intervention rather than merely having
                                 # the module uploaded.
-                                primitive_names = re.findall(r"\\bP\\.(floor|wall|roof|limb|stack|block|cyl|ball|wedge)\\s*\\(", code)
+                                primitive_names = re.findall(r"\bP\.(floor|wall|roof|limb|stack|block|cyl|ball|wedge)\s*\(", code)
                                 for primitive_name in primitive_names:
                                     m.primitive_calls_by_type[primitive_name] = m.primitive_calls_by_type.get(primitive_name, 0) + 1
                                 inject = "local P = require(game.ReplicatedStorage.PartPrimitives)\n"
