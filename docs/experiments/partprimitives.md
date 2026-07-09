@@ -15,7 +15,8 @@ A small composition API can improve decomposition and connected placement by mak
 - real rectangular window gaps, including door plus window combinations
 - roof placement from the support top plane
 - orientation-independent limb segment alignment
-- primitive calls counted as edits
+- explicit `P.limb` origin-face anchors for top, bottom, left, right, front, and back attachments
+- primitive calls counted as edits and recorded by constructor type
 - structural flags placed before the capped structure listing
 
 ## old evidence
@@ -36,12 +37,25 @@ The infrastructure path completed both evals with screenshots and incremental re
 
 No visual judge ran. Human screenshot review is the current verdict: execution succeeded, but this smoke does not justify the full ten-eval run.
 
-## next run
+## follow-up results
 
-Do a narrow follow-up before the full benchmark:
+`primitives_0709_1347` and `primitives_0709_1353` were infrastructure failures before model construction. `primitives_0709_1402` was a diagnostic run that exposed an over-escaped primitive trace regex. They are not quality data.
 
-1. verify from the tool trace whether the model actually used `P.limb` and other `P.*` constructors
-2. inspect the primitive API prompt and the dragon composition instructions for parent-chain ambiguity
-3. rerun only dragon after the smallest demonstrated fix
+`primitives_0709_1405` was the first clean dragon-only run after fixing that regex:
 
-Do not run all ten building evals until the dragon head and limb-chain failure is understood.
+- primitive usage was confirmed: `block=5`, `limb=17`, `ball=4`, `wedge=4`
+- 58 total parts, 15 floating parts, 33 overlaps
+- `--no-gate` execution passed, but `passed_cons=false`; no visual quality promotion
+
+The smallest demonstrated API fix added explicit `P.limb` origin-face anchors. `primitives_0709_1411` used the new API:
+
+- primitive usage: `floor=1`, `block=7`, `limb=10`, `wedge=5`, `ball=2`
+- 49 total parts, 12 floating parts, 71 overlaps
+- one harness `execute_luau` error was recovered without aborting the run
+- screenshots remained too dark and structurally cluttered for a quality pass
+
+The anchor fix reduced the floating-part count but increased overlaps and did not make the dragon visually coherent. Primitive adoption is proven. Primitive quality is not.
+
+## current verdict
+
+Do not start the full ten-building run. The useful result is that the model does use `P.limb`, and the original top-only origin was a real API limitation, but the anchor extension is not sufficient evidence for benchmark promotion. Further geometry changes need a more direct trace of the model-authored code or a narrower construction task, not another blind full run.

@@ -8,23 +8,21 @@ Measure whether the small `PartPrimitives` API improves connected Roblox constru
 
 ## current status
 
-- primitive source patch applied for wall openings, roof seating, and limb orientation
+- primitive source patch applied for wall openings, roof seating, limb orientation, and explicit limb origin faces
 - structural dump now emits flags before the capped part listing
 - run metadata records the actual experiment configuration
+- primitive usage instrumentation is verified
 - legacy helper and fixer files are separated under `legacy/`
 - post-patch local validation passed
-- the targeted Studio smoke completed, but visual review did not promote the arm to a full run
+- dragon usage and anchor follow-up runs completed, but neither passed visual/structural review
 
 ## next sequence
 
-1. run local syntax and diff checks
-2. run the targeted cottage + dragon primitive smoke test
-3. inspect screenshots, structural flags, edit counts, and run metadata
-4. verify primitive usage and fix only issues demonstrated by the smoke
-5. rerun dragon as a focused follow-up
-6. run the controlled 10-building primitive experiment only after review
-7. review screenshots manually before comparing against vanilla
-8. decide whether to keep primitives v1, revise the API, or stop the arm
+1. preserve and index the dragon diagnostic and follow-up artifacts
+2. inspect or persist model-authored primitive code before changing geometry again
+3. decide whether to stop the primitive arm or define one narrower construction test
+4. run the controlled 10-building primitive experiment only after a focused visual/structural pass succeeds
+5. review screenshots manually before comparing against vanilla
 
 ## active constraints
 

@@ -31,11 +31,12 @@ Recent primitive and harness patches have been applied. The important changes ar
 - `P.wall` makes actual window gaps and can combine door and window openings
 - pitched roofs use the support top plane as their base
 - limb segments align their longest physical axis to the chain direction
+- `P.limb` accepts explicit origin-face anchors for top, bottom, left, right, front, and back attachments
 - structural flags appear before the capped structure listing
 - run manifests record the experiment configuration
 - primitive constructor calls count as edits
 
-Local syntax checks passed. The targeted Studio smoke `primitives_0709_1321` completed, but visual review found disconnected dragon geometry and several cottage floating-detail flags. The primitive patch is not experimentally validated as a benchmark improvement yet.
+Local syntax checks passed. The clean dragon usage run `primitives_0709_1405` confirmed model-authored primitive adoption, but reported 15 floating parts and 33 overlaps. The origin-anchor follow-up `primitives_0709_1411` reduced floating parts to 12 but increased overlaps to 71, and its screenshots remained structurally cluttered and too dark for a quality pass. Neither run validates the primitive arm as a benchmark improvement.
 
 ## source map
 
@@ -69,4 +70,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-Inspect the dragon tool trace and primitive usage, then make only the smallest demonstrated fix. Rerun dragon before considering the full ten-building experiment. Keep the pulled smoke artifacts under `results_pull/primitives_0709_1321/`.
+Do not start the full ten-building experiment. The focused runs proved that the model adopts `P.*` constructors and that top-only limb placement was a real limitation, but the anchor extension did not produce acceptable geometry. Preserve the run artifacts and inspect model-authored primitive code or narrow the task before making another API change.
