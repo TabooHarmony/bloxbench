@@ -371,7 +371,16 @@ async def llm_chat(
 # �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
 # �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
 # Error Categorization
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+
+def describe_exception(exc: BaseException) -> str:
+    """Flatten nested ExceptionGroup/TaskGroup errors for actionable logs."""
+    children = getattr(exc, "exceptions", None)
+    if children:
+        return " | ".join(describe_exception(child) for child in children)
+    text = str(exc).strip()
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
+
 
 def categorize_error(error_text: str) -> str:
     """Categorize an error message into a standard category.
@@ -1834,17 +1843,15 @@ return tostring(count) .. "|" .. result
         m.error_category = "timeout"
         logger.error(f"[{ev.scenario_name}] Eval timed out after {run.eval_timeout}s")
     except Exception as e:
-        # Unwrap ExceptionGroup / TaskGroup to get the actual sub-exception
-        err_msg = str(e)
-        if hasattr(e, 'exceptions') and e.exceptions:
-            err_msg = str(e.exceptions[0])
-        if not err_msg:
-            err_msg = type(e).__name__
+        # Flatten nested ExceptionGroup / TaskGroup errors so the actual
+        # transport or tool failure is visible in the run log.
+        err_msg = describe_exception(e)
         m.error = f"Fatal: {err_msg}"
-        logger.error(f"[{ev.scenario_name}] Fatal: {err_msg}")
-        if hasattr(e, "exceptions"):
-            for i, sub in enumerate(e.exceptions):
-                logger.error(f"[{ev.scenario_name}]   sub[{i}]: {type(sub).__name__}: {str(sub)[:300]}")
+        logger.error(f"[{ev.scenario_name}] Fatal: {err_msg[:1000]}")
+        children = getattr(e, "exceptions", None)
+        if children:
+            for i, sub in enumerate(children):
+                logger.error(f"[{ev.scenario_name}]   sub[{i}]: {describe_exception(sub)[:1000]}")
     finally:
         kill_studio()
 
