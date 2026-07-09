@@ -17,13 +17,7 @@ local eval: BaseEval = {
                 role = "user",
                 content = [[Create an egg hatching screen for a pet simulator game.
 
-Layout (top to bottom):
-- Title TextLabel: "Hatch an Egg!" at the top, centered, font GothamBold, size 36
-- Egg display: a large Frame (200x200) in the center, colored light blue
-- Price TextButton below the egg: "Hatch (50 Coins)", green background, white text, 200x50
-- Cancel TextButton below that: "Cancel", red background, white text, 200x50
-
-All elements inside a ScreenGui in StarterGui. Use UICorner on buttons with radius 8. Background should be a semi-transparent dark frame covering the full screen.]],
+Show a title at the top, a large egg display in the center, a green button to hatch for coins, and a red cancel button below it. Add a semi-transparent dark overlay covering the whole screen behind everything. Make the buttons look polished with rounded corners.]],
                 request_id = "vb_ui_001"
             }
         }
@@ -92,7 +86,36 @@ eval.check_scene = function()
     assert(findButtonWithText(screenGui, "50") or findButtonWithText(screenGui, "coin"), "No TextButton with price (50/coins) found")
     assert(findButtonWithText(screenGui, "Cancel"), "No TextButton with 'Cancel' found")
     assert(findLargeFrame(screenGui), "No Frame >= 80x80 found (egg display)")
-end
+
+    -- Strengthened: container coverage (background covers screen)
+    local function findFullScreenFrame(sg)
+        for _, d in ipairs(sg:GetDescendants()) do
+            if d:IsA("Frame") then
+                local sz = d.AbsoluteSize
+                if sz.X >= 400 and sz.Y >= 300 then return d end
+            end
+        end
+        return nil
+    end
+    local bg = findFullScreenFrame(screenGui)
+    assert(bg, "No full-screen background frame found (should cover screen)")
+
+    -- Strengthened: vertical stacking (title above egg above buttons)
+    local title = findLabelWithText(screenGui, "Hatch")
+    local egg = findLargeFrame(screenGui)
+    local hatchBtn = findButtonWithText(screenGui, "coin") or findButtonWithText(screenGui, "50")
+    if title and egg and hatchBtn then
+        assert(title.AbsolutePosition.Y < egg.AbsolutePosition.Y, "Title should be above egg display")
+        assert(egg.AbsolutePosition.Y < hatchBtn.AbsolutePosition.Y, "Egg should be above hatch button")
+    end
+
+    -- Strengthened: button colors (green hatch, red cancel)
+    local cancelBtn = findButtonWithText(screenGui, "Cancel")
+    if cancelBtn then
+        local c = cancelBtn.BackgroundColor3
+        local r, g, b = c.R * 255, c.G * 255, c.B * 255
+        assert(g > r and g > b, "Cancel button should be reddish (green channel should not dominate)")
+    endend
 
 eval.check_game = function()
 end

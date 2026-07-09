@@ -17,15 +17,7 @@ local eval: BaseEval = {
                 role = "user",
                 content = [[Build an upgrades panel for a simulator game.
 
-Layout:
-- Title TextLabel: "Upgrades" at the top, centered, font GothamBold, size 28
-- 3 stat rows, each 400x60, stacked vertically with 10px spacing:
-  - Row 1: TextLabel "WalkSpeed" on left (200px wide), TextLabel "Lv. 3" next to it, TextButton "Upgrade - 500" on right (green, 150x50)
-  - Row 2: TextLabel "Coin Multiplier" on left, TextLabel "Lv. 2" next, TextButton "Upgrade - 750" (green, 150x50)
-  - Row 3: TextLabel "Backpack Size" on left, TextLabel "Lv. 1" next, TextButton "Upgrade - 300" (green, 150x50)
-- Close TextButton: "Close" at bottom-right, 100x40, red background
-
-ScreenGui in StarterGui. Container 480x350, centered, dark background (RGB 25,25,35), UICorner radius 8. Row backgrounds RGB 40,40,55 with UICorner radius 6.]],
+Show a title at the top. Below it, three stat rows stacked vertically. Each row should show a stat name on the left, the current level in the middle, and an upgrade button on the right. At the bottom, show a close button. Use green for the upgrade buttons and red for the close button. Make it look polished with rounded corners on a dark background.]],
                 request_id = "vb_ui_005"
             }
         }
@@ -84,7 +76,43 @@ eval.check_scene = function()
         end
     end
     assert(foundClose, "No TextButton with 'Close' found")
-end
+
+    -- Strengthened: container coverage
+    local function findContainerFrame(sg)
+        for _, d in ipairs(sg:GetDescendants()) do
+            if d:IsA("Frame") then
+                local sz = d.AbsoluteSize
+                if sz.X >= 300 and sz.Y >= 200 then return d end
+            end
+        end
+        return nil
+    end
+    local container = findContainerFrame(screenGui)
+    assert(container, "No container-sized frame found (should be a panel)")
+
+    -- Strengthened: button colors (green upgrade, red close)
+    local upgradeBtn = nil
+    for _, d in ipairs(screenGui:GetDescendants()) do
+        if d:IsA("TextButton") and string.find(string.lower(d.Text), "upgrade") then
+            upgradeBtn = d
+            break
+        end
+    end
+    if upgradeBtn then
+        local c = upgradeBtn.BackgroundColor3
+        assert(c.G > c.R and c.G > c.B, "Upgrade button should be greenish")
+    end
+    local closeBtn = nil
+    for _, d in ipairs(screenGui:GetDescendants()) do
+        if d:IsA("TextButton") and string.find(string.lower(d.Text), "close") then
+            closeBtn = d
+            break
+        end
+    end
+    if closeBtn then
+        local c = closeBtn.BackgroundColor3
+        assert(c.R > c.G and c.R > c.B, "Close button should be reddish")
+    endend
 
 eval.check_game = function()
 end

@@ -17,17 +17,7 @@ local eval: BaseEval = {
                 role = "user",
                 content = [[Create a daily rewards popup for a 7-day streak system.
 
-Layout:
-- Title TextLabel: "Daily Rewards" at the top, centered
-- 7 day slots in a horizontal row, each 80x80:
-  - Day number TextLabel (1-7) at top of each slot
-  - Reward icon Frame below the number (40x40, different color per day)
-  - Day 3 slot should have a yellow border (UIStroke, 3px) to indicate claimable
-  - Days 1-2 should be slightly transparent (0.5) to show already claimed
-- Claim TextButton: "Claim Day 3" below the row, green, 200x50
-- Close TextButton: "X" in the top-right corner, 40x40
-
-ScreenGui in StarterGui. Container frame should be 700x300, centered, dark background with UICorner radius 12.]],
+Show a title at the top, then 7 day slots in a horizontal row. Each slot should have a day number and a reward icon. One day should be highlighted with a colored border to show it's claimable. Days that are already claimed should look faded. Include a claim button below the row and a close button in the top-right corner. Make it look like a polished popup with rounded corners on a dark background.]],
                 request_id = "vb_ui_002"
             }
         }
@@ -107,7 +97,26 @@ eval.check_scene = function()
         end
     end
     assert(foundClose, "No close/X TextButton found")
-end
+
+    -- Strengthened: container coverage
+    local function findLargeFrame(sg)
+        for _, d in ipairs(sg:GetDescendants()) do
+            if d:IsA("Frame") then
+                local sz = d.AbsoluteSize
+                if sz.X >= 300 and sz.Y >= 150 then return d end
+            end
+        end
+        return nil
+    end
+    local container = findLargeFrame(screenGui)
+    assert(container, "No container-sized frame found (should be a popup panel)")
+
+    -- Strengthened: ZIndex ordering (container behind content)
+    for _, d in ipairs(screenGui:GetDescendants()) do
+        if d:IsA("TextLabel") or d:IsA("TextButton") then
+            assert(d.ZIndex >= container.ZIndex, "Content elements should have ZIndex >= container")
+        end
+    endend
 
 eval.check_game = function()
 end

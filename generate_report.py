@@ -2,7 +2,7 @@
 generate_report.py — BloxBench results report generator.
 
 Takes a results.json from a BloxBench run and produces a detailed markdown report
-with model profiles, per-eval breakdowns, behavioral patterns, and pairwise comparisons.
+with model profiles, per-eval breakdowns, and behavioral patterns.
 
 Usage:
     python generate_report.py results/vanilla_0702_1200/results.json --output reports/model_report.md
@@ -153,36 +153,6 @@ def generate_single_report(data: dict) -> str:
             seq_len = len(e.get("tool_call_sequence", []))
             lines.append(f"- {e['scenario']}: {e['rounds_used']} rounds, {seq_len} tool calls, judge={e['judge_overall']}/5, {fmt_ms(e.get('total_time_ms', 0))}")
 
-    # Self-awareness: final_response_text vs actual output
-    liars = []
-    for e in evals:
-        resp = e.get("final_response_text", "")
-        if not resp or not e.get("passed"):
-            continue
-        issues = e.get("judge_issues", [])
-        if issues:
-            # Check if model claimed something the judge flagged as missing
-            resp_lower = resp.lower()
-            for issue in issues:
-                issue_lower = issue.lower() if isinstance(issue, str) else ""
-                # Simple heuristic: if model mentions a feature the judge says is missing
-                keywords = ["corner", "gradient", "color", "font", "border", "transparent", "align", "center"]
-                for kw in keywords:
-                    if kw in resp_lower and kw in issue_lower:
-                        liars.append({
-                            "scenario": e.get("scenario", ""),
-                            "keyword": kw,
-                            "issue": issue,
-                        })
-                        break
-
-    if liars:
-        lines.append(f"\n### Self-Awareness (claimed but missing)\n")
-        for l in liars:
-            lines.append(f"- {l['scenario']}: model mentioned '{l['keyword']}' but judge noted: \"{l['issue']}\"")
-    else:
-        lines.append(f"\n### Self-Awareness\nNo discrepancies detected between model claims and judge observations.")
-
     # Code vs visual gap
     lines.append(f"\n### Code vs Visual Quality\n")
     for e in evals:
@@ -321,39 +291,6 @@ def generate_comparison_report(all_data: list[dict], labels: list[str]) -> str:
             else:
                 row.append("—")
         lines.append("| " + " | ".join(row) + " |")
-
-    # Pairwise winners
-    if len(all_data) == 2:
-        lines.append("\n## Pairwise Winners\n")
-        a_wins = 0
-        b_wins = 0
-        ties = 0
-        for scenario in sorted(all_scenarios):
-            ea = eval_maps[0].get(scenario)
-            eb = eval_maps[1].get(scenario)
-            ja = ea.get("judge_overall") if ea else None
-            jb = eb.get("judge_overall") if eb else None
-            if ja is None and jb is None:
-                continue
-            if ja and jb:
-                if ja > jb:
-                    winner = labels[0]
-                    a_wins += 1
-                elif jb > ja:
-                    winner = labels[1]
-                    b_wins += 1
-                else:
-                    winner = "tie"
-                    ties += 1
-                lines.append(f"- {scenario}: {labels[0]}={ja}/5 vs {labels[1]}={jb}/5 → **{winner}**")
-            elif ja and not jb:
-                lines.append(f"- {scenario}: {labels[0]}={ja}/5 vs {labels[1]}=gate fail → **{labels[0]}** (gate)")
-                a_wins += 1
-            elif jb and not ja:
-                lines.append(f"- {scenario}: {labels[0]}=gate fail vs {labels[1]}={jb}/5 → **{labels[1]}** (gate)")
-                b_wins += 1
-        
-        lines.append(f"\n**Tally**: {labels[0]}={a_wins}, {labels[1]}={b_wins}, ties={ties}")
 
     # Strategy comparison
     lines.append("\n## Strategy Comparison\n")

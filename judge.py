@@ -3,10 +3,6 @@ VisualJudge — LLM-as-judge for visual eval scoring.
 
 Scores eval results that pass the structural gate by sending screenshots
 + structural text dump + rubric to a vision model.
-
-Two modes:
-  - score(): absolute 1-5 scoring per rubric dimension
-  - compare(): pairwise comparison between two models' outputs
 """
 
 import asyncio
@@ -81,71 +77,6 @@ Where N is an integer 1-5. The "overall" should be your holistic assessment."""
 
         return [{"role": "user", "content": content}]
 
-    def _build_compare_messages(
-        self,
-        task_prompt: str,
-        rubric: dict,
-        screenshots_a: list[str],
-        screenshots_b: list[str],
-        structure_a: str = "",
-        structure_b: str = "",
-    ) -> list:
-        """Build messages for pairwise comparison."""
-        rubric_text = "\n".join(
-            f"- {dim}: {desc}" for dim, desc in rubric.items()
-        )
-
-        instruction = f"""You are comparing two Roblox Studio agents' work side by side. Both were asked to:
-
-{task_prompt}
-
-Scoring criteria:
-{rubric_text}
-
-Design A (first set of images) and Design B (second set of images) are attached."""
-        if structure_a:
-            instruction += f"\n\nDesign A structural description:\n{structure_a}"
-        if structure_b:
-            instruction += f"\n\nDesign B structural description:\n{structure_b}"
-
-        instruction += """
-
-Respond ONLY with valid JSON:
-{"winner": "A" or "B" or "tie", "reasoning": "brief explanation of which design is better and why", "a_scores": {"correctness": N, "layout": N, "aesthetics": N, "completeness": N}, "b_scores": {"correctness": N, "layout": N, "aesthetics": N, "completeness": N}}
-
-Where N is an integer 1-5."""
-
-        content = [{"type": "text", "text": instruction}]
-
-        # Add Design A images
-        for ss_path in screenshots_a:
-            if os.path.exists(ss_path):
-                b64 = self._encode_image(ss_path)
-                content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{b64}",
-                        "detail": "high",
-                    },
-                })
-
-        # Add separator text
-        content.append({"type": "text", "text": "--- Design B below ---"})
-
-        # Add Design B images
-        for ss_path in screenshots_b:
-            if os.path.exists(ss_path):
-                b64 = self._encode_image(ss_path)
-                content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{b64}",
-                        "detail": "high",
-                    },
-                })
-
-        return [{"role": "user", "content": content}]
-
     async def _call_vision_api(self, messages: list) -> dict:
         """Call the vision LLM API and parse JSON response."""
         headers = {
@@ -155,29 +86,67 @@ Where N is an integer 1-5."""
         body = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": 1000,
-            "temperature": 0.2,
+            "max_tokens": 2000,
+            "temperature": 0,
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.api_base}/chat/completions",
-                headers=headers,
-                json=body,
-                timeout=aiohttp.ClientTimeout(total=120),
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    raise Exception(f"Judge API error {resp.status}: {text[:500]}")
-                data = await resp.json()
+        last_error = None
+        for attempt in range(3):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{self.api_base}/chat/completions",
+                        headers=headers,
+                        json=body,
+                        timeout=aiohttp.ClientTimeout(total=120),
+                    ) as resp:
+                        if resp.status != 200:
+                            text = await resp.text()
+                            raise Exception(f"Judge API error {resp.status}: {text[:500]}")
+                        data = await resp.json()
+                break
+            except Exception as e:
+                last_error = e
+                if attempt < 2:
+                    wait = 2 ** (attempt + 1)
+                    logger.warning(f"Judge API attempt {attempt+1} failed: {e}, retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                else:
+                    raise
 
         content = data["choices"][0]["message"]["content"]
 
-        # Extract JSON from response (may be wrapped in markdown code block)
+        # Extract JSON from response — try fence extraction first, then regex fallback
+        # Strip markdown code fences if present
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            # Remove ```json or ``` prefix
+            lines = cleaned.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+
+        # Try direct JSON parse first
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback: find the first balanced JSON object
+        # Find first '{' and try to parse from there, expanding until valid
         import re
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group())
+        start = cleaned.find("{")
+        if start == -1:
+            raise ValueError(f"Could not parse JSON from judge response: {content[:500]}")
+        # Try progressively shorter substrings from first '{' to last '}'
+        end = cleaned.rfind("}")
+        while end > start:
+            try:
+                return json.loads(cleaned[start:end+1])
+            except json.JSONDecodeError:
+                end = cleaned.rfind("}", start, end)
         raise ValueError(f"Could not parse JSON from judge response: {content[:500]}")
 
     async def score(
@@ -193,23 +162,4 @@ Where N is an integer 1-5."""
         )
         result = await self._call_vision_api(messages)
         logger.info(f"Judge scored: overall={result.get('overall', '?')}")
-        return result
-
-    async def compare(
-        self,
-        task_prompt: str,
-        rubric: dict,
-        screenshots_a: list[str],
-        screenshots_b: list[str],
-        structure_a: str = "",
-        structure_b: str = "",
-    ) -> dict:
-        """Pairwise comparison. Returns winner + reasoning + individual scores."""
-        messages = self._build_compare_messages(
-            task_prompt, rubric,
-            screenshots_a, screenshots_b,
-            structure_a, structure_b,
-        )
-        result = await self._call_vision_api(messages)
-        logger.info(f"Judge comparison: winner={result.get('winner', '?')}")
         return result

@@ -17,14 +17,7 @@ local eval: BaseEval = {
                 role = "user",
                 content = [[Build a player-to-player trade window for a simulator game.
 
-Layout:
-- Header TextLabel: "Trade with Player1" at the top, centered
-- Two side-by-side panels (300x250 each, 20px gap):
-  - Left panel: "You" label at top, 4 item slot Frames (60x60 each, 2x2 grid) below, coin count TextLabel "1,250" at bottom
-  - Right panel: "Them" label at top, 4 item slot Frames (60x60 each, 2x2 grid) below, coin count TextLabel "0" at bottom
-- Bottom row: "Accept" TextButton (green, 150x45) and "Cancel" TextButton (red, 150x45), centered with 20px gap
-
-ScreenGui in StarterGui. Container 640x400, centered, dark background (RGB 30,30,40), UICorner radius 10. Panel backgrounds slightly lighter (RGB 45,45,60).]],
+Show a header at the top with the trade partner's name. Below it, two side-by-side panels: one labeled "You" and one labeled "Them". Each panel should have a 2x2 grid of item slots and a coin display at the bottom. At the very bottom, show an accept button (green) and a cancel button (red). Make it look polished with rounded corners on a dark background.]],
                 request_id = "vb_ui_003"
             }
         }
@@ -96,7 +89,42 @@ eval.check_scene = function()
         end
     end
     assert(panelCount >= 2, string.format("Only %d panel-sized frames found, need >= 2", panelCount))
-end
+
+    -- Strengthened: vertical stacking (header above panels above buttons)
+    local header = nil
+    for _, d in ipairs(screenGui:GetDescendants()) do
+        if d:IsA("TextLabel") and string.find(string.lower(d.Text), "trade") then
+            header = d
+            break
+        end
+    end
+    local acceptBtn = nil
+    for _, d in ipairs(screenGui:GetDescendants()) do
+        if d:IsA("TextButton") and string.find(string.lower(d.Text), "accept") then
+            acceptBtn = d
+            break
+        end
+    end
+    if header and acceptBtn then
+        assert(header.AbsolutePosition.Y < acceptBtn.AbsolutePosition.Y, "Header should be above accept button")
+    end
+
+    -- Strengthened: button colors (green accept, red cancel)
+    if acceptBtn then
+        local c = acceptBtn.BackgroundColor3
+        assert(c.G > c.R and c.G > c.B, "Accept button should be greenish")
+    end
+    local cancelBtn = nil
+    for _, d in ipairs(screenGui:GetDescendants()) do
+        if d:IsA("TextButton") and string.find(string.lower(d.Text), "cancel") then
+            cancelBtn = d
+            break
+        end
+    end
+    if cancelBtn then
+        local c = cancelBtn.BackgroundColor3
+        assert(c.R > c.G and c.R > c.B, "Cancel button should be reddish")
+    endend
 
 eval.check_game = function()
 end

@@ -1,5 +1,13 @@
 .env
+
+# generated/local operator artifacts
 results/
+results_pull/
+results.html
+_serve/
+review.html
 __pycache__/
 *.pyc
 *.log
+*.bak
+_test_mcp.py

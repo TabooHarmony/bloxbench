@@ -78,7 +78,7 @@ class ModelConfig:
 class StudioConfig:
     exe_path: str
     mcp_path: str
-    startup_wait: int = 20
+    startup_wait: int = 45
 
 
 @dataclass
@@ -97,6 +97,14 @@ class RunConfig:
     skills_index: Optional[str] = None
     judge: Optional[object] = None
     judge_enabled: bool = False
+    temperature: float = 0
+    max_tokens_per_eval: int = 500000
+    solver_code: Optional[str] = None  # SpatialSolver.lua source (solver mode)
+    no_gate: bool = False  # Skip check_scene, capture everything for human review
+    fixer: bool = False  # Run StructuralFixer after build, before screenshots
+    fixer_code: Optional[str] = None  # StructuralFixer.lua source
+    helpers_code: Optional[str] = None  # SpatialHelpers.lua source (helpers mode)
+    primitives_code: Optional[str] = None  # PartPrimitives.lua source (primitives mode)
 
 
 # �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
@@ -164,6 +172,8 @@ class EvalFile:
     judge_rubric: dict = field(default_factory=dict)
     screenshot_type: str = ""
     screenshot_angles: int = 1
+    screenshot_primary: str = "front"
+    check_game_empty: bool = True
 
 
 def parse_eval(path: str) -> EvalFile:
@@ -187,10 +197,21 @@ def parse_eval(path: str) -> EvalFile:
     # Parse screenshot config
     ss_type = ""
     ss_angles = 1
-    ss_m = re.search(r'--\s*@screenshot\s+type=(\w+)\s+angles=(\d+)', content)
+    ss_primary = "front"
+    ss_m = re.search(r'--\s*@screenshot\s+type=(\w+)\s+angles=(\d+)(?:\s+primary=(\w+))?', content)
     if ss_m:
         ss_type = ss_m.group(1)
         ss_angles = int(ss_m.group(2))
+        if ss_m.group(3):
+            ss_primary = ss_m.group(3)
+
+    # Detect if check_game has a non-empty body
+    check_game_empty = True
+    cg_m = re.search(r'eval\.check_game\s*=\s*function\(\)\s*\n(.*?)\nend', content, re.DOTALL)
+    if cg_m:
+        body = cg_m.group(1).strip()
+        if body and not body.startswith("--") and len(body) > 5:
+            check_game_empty = False
 
     return EvalFile(
         path=path,
@@ -201,6 +222,8 @@ def parse_eval(path: str) -> EvalFile:
         judge_rubric=rubric,
         screenshot_type=ss_type,
         screenshot_angles=ss_angles,
+        screenshot_primary=ss_primary,
+        check_game_empty=check_game_empty,
     )
 
 
@@ -249,6 +272,7 @@ class EvalMetrics:
     tool_call_sequence: list = field(default_factory=list)  # ordered tool names
     time_breakdown: dict = field(default_factory=dict)  # {llm_ms, tool_ms, screenshot_ms, setup_ms}
     final_response_text: Optional[str] = None  # model's last message
+    fixer_report: Optional[str] = None  # StructuralFixer output log
 
 
 # �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
@@ -277,11 +301,14 @@ async def llm_chat(
     tools: list,
     timeout: int = 120,
     max_retries: int = 5,
+    temperature: float = 0,
 ) -> dict:
     """Call an OpenAI-compatible chat completions endpoint with retry.
 
     Uses exponential backoff: 2s, 4s, 8s, 16s, 32s.
     Better error unwrapping for ExceptionGroup/TaskGroup errors.
+
+    Handles Cline Pass API which wraps responses in {"data": {...}, "success": true}.
     """
     headers = {
         "Content-Type": "application/json",
@@ -290,6 +317,7 @@ async def llm_chat(
     payload = {
         "model": config.name,
         "messages": messages,
+        "temperature": temperature,
     }
     if tools:
         payload["tools"] = tools
@@ -314,7 +342,12 @@ async def llm_chat(
                         if resp.status == 429:
                             raise RuntimeError(f"429_RATE_LIMIT: {body[:200]}")
                         raise RuntimeError(f"LLM API error {resp.status}: {body[:500]}")
-                    return await resp.json()
+                    data = await resp.json()
+                    # Cline Pass wraps response in {"data": {...}, "success": true}
+                    # Unwrap if needed so downstream code sees standard OpenAI format
+                    if "data" in data and "choices" not in data and "choices" in data.get("data", {}):
+                        data = data["data"]
+                    return data
         except (aiohttp.ClientError, asyncio.TimeoutError, RuntimeError) as e:
             last_error = e
             err_msg = str(e)
@@ -352,31 +385,32 @@ def categorize_error(error_text: str) -> str:
         return "timeout"
     if "TOOL ERROR" in err:
         return "transient_error"
-    # Setup failures (eval-specific, not harness code bugs) — must be before
-    # model_fail keywords because "setup failed" contains substring "ed" which
-    # matches "expected", and "is not" matches various setup error messages.
+    # Setup failures (eval-specific, not harness code bugs)
     if "SETUP_ERROR" in err or "SETUP FAILED" in err:
         return "setup_error"
     # Eval assertion failures = model didn't accomplish the task
     if "CHECK_SCENE FAILED" in err or "CHECK_GAME FAILED" in err:
         return "model_fail"
-    if any(kw in error_text for kw in ["is not", "isn't", "expected", "should be",
-                                        "not properly", "hasn't", "has not been",
-                                        "was not", "wasn't", "did not", "didn't",
-                                        "missing", "incorrect"]):
-        return "model_fail"
-    # External infrastructure failures
+    # External infrastructure failures — check BEFORE generic keywords
+    # because HTTP 429 text may contain "expected" etc.
     if any(kw in err for kw in ["HTTP 403", "HTTP 404", "HTTP 429", "HTTP 500",
+                                  "HTTP 502", "HTTP 503", "HTTP 504",
                                   "FORBIDDEN", "USER IS MODERATED",
                                   "STUDIO PROCESS NOT FOUND",
                                   "FAILED TO LAUNCH STUDIO"]):
         return "infra_error"
-    # Network/connection errors
+    # Network/connection errors — check BEFORE generic keywords
     if any(kw in err for kw in ["CONNECTION", "NETWORK", "ECONNRESET", "ECONNREFUSED",
                                   "ETIMEDOUT", "SOCKET", "DNS", "SSL", "CERTIFICATE",
                                   "BROKEN PIPE", "REMOTE DISCONNECT",
                                   "TASKGROUP", "CLOSEDRESOURCE", "BROKENRESOURCE"]):
         return "transient_error"
+    # Generic model failure keywords — checked LAST
+    if any(kw in error_text for kw in ["is not", "isn't", "expected", "should be",
+                                        "not properly", "hasn't", "has not been",
+                                        "was not", "wasn't", "did not", "didn't",
+                                        "missing", "incorrect"]):
+        return "model_fail"
     return "harness_error"
 
 
@@ -394,6 +428,15 @@ async def launch_studio(studio: StudioConfig, place_path: str) -> bool:
     abs_place = str(Path(place_path).resolve())
     logger.info(f"Launching Studio with {abs_place}")
 
+    # Clean up stale lock file (previous force-kill may have left it)
+    lock_file = abs_place + ".lock"
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+            logger.info(f"Removed stale lock file: {lock_file}")
+        except OSError:
+            pass
+
     # Restore cookies before launch (in case previous kill corrupted them)
     restore_cookies()
 
@@ -402,7 +445,7 @@ async def launch_studio(studio: StudioConfig, place_path: str) -> bool:
     task_name = f"HarnessStudio_{int(time.time())}"
 
     # Create scheduled task targeting interactive desktop
-    # NOTE: do NOT use /rl highest �?" elevation changes the user token context,
+    # NOTE: do NOT use /rl highest — elevation changes the user token context,
     # which makes WebView2 use a different cookie store (Studio loses auth).
     create = subprocess.run(
         ["schtasks", "/create", "/tn", task_name, "/tr", cmd,
@@ -557,20 +600,28 @@ end
 local modules = {modules_table}
 
 for name, source in pairs(modules) do
+    -- Destroy and recreate (do NOT just overwrite .Source): a ModuleScript whose
+    -- .Source is overwritten after it has already been require()'d keeps its stale
+    -- compiled state, which can surface as "module experienced an error while loading"
+    -- on later evals. Recreating forces a clean compile every eval.
     local existing = eu:FindFirstChild(name)
-    if existing then
-        existing.Source = source
-    else
-        local mod = Instance.new("ModuleScript")
-        mod.Name = name
-        mod.Source = source
-        mod.Parent = eu
-    end
+    if existing then existing:Destroy() end
+    local mod = Instance.new("ModuleScript")
+    mod.Name = name
+    mod.Source = source
+    mod.Parent = eu
 end
 return "ok"
 """
 
 ENSURE_LOADED_CODE = _build_evalutils_inject_lua()
+
+# Full rebuild: destroy LoadedCode entirely, then re-inject. Used to recover from
+# stale/corrupted module state left by a previous eval's model phase.
+REBUILD_LOADED_CODE = """
+local existing = game:FindFirstChild("LoadedCode")
+if existing then existing:Destroy() end
+""" + ENSURE_LOADED_CODE
 
 # Bridge script for server-side check_game execution.
 # This Script runs in the game server context during play mode (not plugin context).
@@ -891,20 +942,35 @@ async def _run_single_eval_inner(
 
     studio_proc = None
     try:
-        # 1. Launch Studio on interactive desktop
-        if not await launch_studio(studio, str(place_path)):
-            m.error = "Failed to launch Studio (schtasks error)"
-            m.error_category = categorize_error(m.error)
-            m.total_time_ms = int((time.time() - t0) * 1000)
-            return m
+        # 1. Launch Studio on interactive desktop (with retry)
+        studio_launched = False
+        for launch_attempt in range(3):
+            if launch_attempt > 0:
+                logger.warning(f"[{ev.scenario_name}] Studio launch retry {launch_attempt+1}/3")
+                kill_studio()  # clean up any partial launch
+                await asyncio.sleep(5)
+            if not await launch_studio(studio, str(place_path)):
+                continue
 
-        # 1b. Verify Studio is actually running
-        check = subprocess.run(
-            ["tasklist", "/fi", "imagename eq RobloxStudioBeta.exe", "/nh"],
-            capture_output=True, text=True,
-        )
-        if "RobloxStudioBeta.exe" not in check.stdout:
-            m.error = "Studio process not found after launch"
+            # 1b. Verify Studio is actually running (poll for up to 30s)
+            studio_found = False
+            for _ in range(6):
+                check = subprocess.run(
+                    ["tasklist", "/fi", "imagename eq RobloxStudioBeta.exe", "/nh"],
+                    capture_output=True, text=True,
+                )
+                if "RobloxStudioBeta.exe" in check.stdout:
+                    studio_found = True
+                    break
+                await asyncio.sleep(5)
+
+            if studio_found:
+                studio_launched = True
+                break
+            logger.warning(f"[{ev.scenario_name}] Studio process not found, will retry")
+
+        if not studio_launched:
+            m.error = "Studio process not found after 3 launch attempts"
             m.error_category = categorize_error(m.error)
             m.total_time_ms = int((time.time() - t0) * 1000)
             return m
@@ -962,6 +1028,67 @@ async def _run_single_eval_inner(
                 # 4. Ensure LoadedCode exists
                 await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": ENSURE_LOADED_CODE}, m)
 
+                # 4a. Remove SpawnLocation so it doesn't appear in screenshots or confuse gates
+                await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": """
+local sl = workspace:FindFirstChild("SpawnLocation")
+if sl then sl:Destroy() end
+return "spawn_removed"
+"""}, m)
+
+                # 4b. Solver mode: upload SpatialSolver module to ReplicatedStorage
+                if run.solver_code:
+                    solver_upload = f"""
+local RS = game:GetService("ReplicatedStorage")
+local existing = RS:FindFirstChild("SpatialSolver")
+if existing then existing:Destroy() end
+local mod = Instance.new("ModuleScript")
+mod.Name = "SpatialSolver"
+mod.Source = [==[{run.solver_code}]==]
+mod.Parent = RS
+return "solver_uploaded"
+"""
+                    _, solver_text = await harness_call_tool(
+                        session, "execute_luau",
+                        {"datamodel_type": "Edit", "code": solver_upload}, m
+                    )
+                    logger.info(f"[{ev.scenario_name}] Solver module uploaded: {solver_text[:60]}")
+
+                # 4c. Helpers mode: upload SpatialHelpers module to ReplicatedStorage
+                if run.helpers_code:
+                    helpers_upload = f"""
+local RS = game:GetService("ReplicatedStorage")
+local existing = RS:FindFirstChild("SpatialHelpers")
+if existing then existing:Destroy() end
+local mod = Instance.new("ModuleScript")
+mod.Name = "SpatialHelpers"
+mod.Source = [==[{run.helpers_code}]==]
+mod.Parent = RS
+return "helpers_uploaded"
+"""
+                    _, helpers_text = await harness_call_tool(
+                        session, "execute_luau",
+                        {"datamodel_type": "Edit", "code": helpers_upload}, m
+                    )
+                    logger.info(f"[{ev.scenario_name}] SpatialHelpers module uploaded: {helpers_text[:60]}")
+
+                # 4c-b. Primitives mode: upload PartPrimitives module to ReplicatedStorage
+                if run.primitives_code:
+                    primitives_upload = """
+local RS = game:GetService("ReplicatedStorage")
+local existing = RS:FindFirstChild("PartPrimitives")
+if existing then existing:Destroy() end
+local mod = Instance.new("ModuleScript")
+mod.Name = "PartPrimitives"
+mod.Source = [==[""" + run.primitives_code + """]==]
+mod.Parent = RS
+return "primitives_uploaded"
+"""
+                    _, primitives_text = await harness_call_tool(
+                        session, "execute_luau",
+                        {"datamodel_type": "Edit", "code": primitives_upload}, m
+                    )
+                    logger.info(f"[{ev.scenario_name}] PartPrimitives module uploaded: {primitives_text[:60]}")
+
                 # 5. Run eval setup (via ModuleScript �?" loadstring unavailable at plugin identity)
                 setup_lua = f"""
 local evalMod = Instance.new("ModuleScript")
@@ -983,11 +1110,14 @@ return "ok"
                     setup_text = get_tool_text(setup_result)
                     if "SETUP_ERROR" not in setup_text:
                         break
-                    if "attempt to index nil" in setup_text:
-                        logger.warning(f"[{ev.scenario_name}] Setup race (attempt {setup_attempt+1}/3): {setup_text[:100]}")
-                        await asyncio.sleep(5)
-                    else:
-                        break
+                    # On a setup failure, the prior eval's model phase may have left
+                    # LoadedCode / EvalUtils modules in a stale or corrupted state.
+                    # Force a full rebuild of LoadedCode before retrying so the
+                    # next attempt starts clean (fresh compile, no cached errors).
+                    logger.warning(f"[{ev.scenario_name}] Setup failed (attempt {setup_attempt+1}/3): {setup_text[:120]}")
+                    await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": REBUILD_LOADED_CODE}, m)
+                    if setup_attempt < 2:
+                        await asyncio.sleep(3)
                 if "SETUP_ERROR" in setup_text:
                     m.error = f"Setup failed: {setup_text}"
                     m.error_category = categorize_error(m.error)
@@ -1013,12 +1143,120 @@ return "ok"
                                 messages.append({"role": "system", "content": f'## Relevant Skill: {skill_name}\n\n{truncated}'})
                                 logger.info(f"[{ev.scenario_name}] auto-routed skill: {skill_name} ({len(skill_content)} chars)")
                     logger.info(f"[{ev.scenario_name}] skill index injected ({len(run.skills_index or '')} chars)")
-                # Luau constraints system prompt
+                # Luau constraints + building style guidance (always on for research splinter)
                 LUAU_SYSTEM_PROMPT = (
-                    "You are writing Luau for Roblox Studio. "
+                    "You are working in Roblox Studio edit mode on an empty baseplate. "
+                    "Your task is to build what is described using execute_luau with datamodel_type='Edit'. "
+                    "The workspace contains only a Baseplate. "
+                    "UI elements (ScreenGuis) go in StarterGui. "
+                    "Scripts go in ServerScriptService or StarterPlayerScripts. "
+                    "Use execute_luau with datamodel_type='Edit' to create and modify instances. "
                     "loadstring() is available in this environment. "
-                    "Use require() with ModuleScripts for modular code."
+                    "Use require() with ModuleScripts for modular code.\n\n"
+                    "## Building guidance\n"
+                    "Build with Roblox Parts (Part, WedgePart, MeshPart if needed). Anchored = true for static builds.\n"
+                    "Y is up. Place structures on the baseplate (bottom near Y=0 unless the prompt says otherwise).\n"
+                    "Order: (1) main masses and silhouette, (2) secondary parts (limbs, roofs, masts, seats), "
+                    "(3) small details. Do not detail a weak primary form.\n"
+                    "Prefer true 3D structure: parts that protrude, recess, and connect in space. "
+                    "Avoid a single box with colors painted on one face.\n"
+                    "Use Size/Position/CFrame deliberately. Vary Material and Color so parts read as distinct.\n"
+                    "Openings (doors, windows) should be real gaps or transparent parts, not flat decals.\n"
+                    "The build should be recognizable from front, side, and top."
                 )
+                # Solver mode: append spec vocabulary
+                if run.solver_code:
+                    LUAU_SYSTEM_PROMPT += (
+                        "\n\n"
+                        "## SpatialSolver Module\n\n"
+                        "A SpatialSolver module is available at `game.ReplicatedStorage.SpatialSolver`. "
+                        "It lets you describe structures declaratively instead of computing CFrames manually.\n\n"
+                        "Usage:\n"
+                        "```lua\n"
+                        "local Solver = require(game.ReplicatedStorage.SpatialSolver)\n"
+                        "local result = Solver.build({\n"
+                        "    components = {\n"
+                        "        {name = \"base\", shape = \"block\", size = {20, 2, 20}, material = \"Stone\"},\n"
+                        "        {name = \"tower_nw\", shape = \"cylinder\", diameter = 6, height = 20,\n"
+                        "         position = {relative = \"base\", at = \"corner_nw\", offset_y = 10}},\n"
+                        "        {name = \"door\", type = \"csg_subtract\", target = \"base\", shape = \"block\",\n"
+                        "         size = {3, 4, 1}, position = {relative = \"base\", at = \"on_face_s\", center_x = true}},\n"
+                        "    }\n"
+                        "})\n"
+                        "-- result = { success = true, parts = {...}, bounds = {...}, errors = {} }\n"
+                        "```\n\n"
+                        "### Shapes\n"
+                        "block, cylinder (diameter+height), ball (diameter), wedge, cone (size)\n\n"
+                        "### Position\n"
+                        "{ relative = \"<name>\", at = \"<anchor>\", offset_x = N, offset_y = N, offset_z = N }\n"
+                        "OR { absolute = {x, y, z} }\n\n"
+                        "### Anchors\n"
+                        "on_top, on_bottom, at_corner_nw/ne/sw/se, on_face_n/s/e_w/center, center\n"
+                        "around_circumference (with count, radius, level_y, start_angle)\n\n"
+                        "### CSG\n"
+                        "{ type = \"csg_subtract\", target = \"<name>\", shape = \"block\", size = {...}, position = {...} }\n"
+                        "{ type = \"csg_union\", target = \"<name>\", ... }\n\n"
+                        "### Properties\n"
+                        "material, color (RGB table or hex string), anchored, can_collide, transparency, name\n\n"
+                        "The solver computes all CFrames. You never touch coordinates. "
+                        "Describe what you want and where it goes relative to other parts."
+                    )
+                # Helpers v2: short factory API (H is auto-injected into execute_luau)
+                if run.helpers_code:
+                    LUAU_SYSTEM_PROMPT += (
+                        "\n\n"
+                        "## SpatialHelpers v2 (use these to build)\n\n"
+                        "`H` is already available inside every execute_luau call. "
+                        "Do NOT require it, do NOT script_read SpatialHelpers, do NOT invent coordinates by hand when H can place.\n\n"
+                        "Factories create + style + place + parent in one call:\n"
+                        "```lua\n"
+                        "local floor = H.block({20, 1, 20}, {name=\"Floor\", material=\"Concrete\", color={150,150,150}, ground=true})\n"
+                        "local wall = H.block({20, 8, 1}, {name=\"Wall\", material=\"Brick\", color={180,100,80}, of=floor, on=\"top\", face=\"south\"})\n"
+                        "local pillar = H.block({2, 10, 2}, {name=\"Pillar\", of=floor, on=\"top\", corner=\"nw\"})\n"
+                        "local post = H.cyl(1.5, 6, {name=\"Post\", material=\"Wood\", next_to=floor, dir=\"east\", gap=2})\n"
+                        "local roof = H.wedge({20, 4, 12}, {name=\"Roof\", of=wall, on=\"top\"})\n"
+                        "local ball = H.ball(3, {name=\"Orb\", of=pillar, on=\"top\", color={255,200,50}, material=\"Neon\"})\n"
+                        "```\n\n"
+                        "Placement fields on opts: `ground=true` | `at={x,y,z}` | `of=part` + `on=\"top\"|\"bottom\"|\"ground\"` | "
+                        "`corner=\"nw|ne|sw|se\"` | `face=\"north|south|east|west\"` | `next_to=part` + `dir=` + `gap=` | `offset={x,y,z}`.\n"
+                        "Style fields: `name`, `color={r,g,b}`, `material` (string), `transparency`.\n"
+                        "Also: `H.place(part, opts)` for an existing part; `H.color` / `H.material`.\n"
+                        "Prefer a few H.block/H.cyl calls over many raw Instance.new parts."
+                    )
+                # Primitives mode: structural composition API (P is auto-injected)
+                if run.primitives_code:
+                    LUAU_SYSTEM_PROMPT += (
+                        "\n\n"
+                        "## PartPrimitives (use these to build connected structures)\n\n"
+                        "`P` is already available inside every execute_luau call. "
+                        "Do NOT require it, do NOT script_read PartPrimitives.\n\n"
+                        "These create CONNECTED subassemblies, not isolated parts:\n"
+                        "```lua\n"
+                        "-- floor seats on ground\n"
+                        "local floor = P.floor({20, 1, 20}, {name=\"Floor\", material=\"Concrete\"})\n"
+                        "-- wall seats on floor, with real door gap\n"
+                        "local wall = P.wall({20, 8, 1}, {name=\"FrontWall\", on=floor, material=\"Brick\",\n"
+                        "    door={w=3, h=4, side=\"center\"}})\n"
+                        "-- pitched roof seats on wall\n"
+                        "local roof = P.roof({20, 4, 12}, {name=\"Roof\", on=wall, style=\"pitched\", material=\"WoodPlanks\"})\n"
+                        "-- connected tail/branch chain (3 tapering segments, curving up)\n"
+                        "local tail = P.limb({{4,3,3}, {3,2,2}, {2,1.5,1.5}}, {origin=body, angle=0, curve=15,\n"
+                        "    name=\"Tail\", material=\"Slate\"})\n"
+                        "-- stacked tower (3 levels, each on previous)\n"
+                        "local tower = P.stack({{10,10,8}, {8,8,8}, {6,6,6}}, {name=\"Tower\", material=\"Slate\"})\n"
+                        "-- simple block/cyl/ball/wedge also available\n"
+                        "local pillar = P.cyl(1.5, 10, {name=\"Pillar\", on=floor, material=\"Wood\"})\n"
+                        "```\n\n"
+                        "Placement: `on=<part>` seats on top | `at={x,y,z}` absolute | `offset={x,y,z}` after placement | `rotation={rx,ry,rz}`.\n"
+                        "Style: `name`, `color={r,g,b}`, `material` (string), `transparency`.\n"
+                        "Wall: `door={w,h,side}` cuts real gap (side: left/right/center) | `direction=\"x\"|\"z\"` | `windows={{w,h,y,side}}`.\n"
+                        "Roof: `style=\"pitched\"|\"flat\"` | `direction=\"x\"|\"z\"` ridge axis | `overhang=N`.\n"
+                        "Limb: `origin=<part>` start point | `angle=N` upward degrees | `yaw=N` horizontal | `curve=N` per-segment bend.\n"
+                        "Stack: `levels={{w,h,d},...}` each level auto-seated on previous.\n\n"
+                        "Use P.wall for walls with doors, P.roof for roofs, P.limb for tails/legs/branches/necks, "
+                        "P.stack for towers/buildings. Use P.block/cyl/ball/wedge for simple parts. "
+                        "Chain primitives by passing the return value as `on=` to the next."
+                    )
                 messages.append({"role": "system", "content": LUAU_SYSTEM_PROMPT})
                 messages.append({"role": "user", "content": ev.prompt_text})
 
@@ -1043,7 +1281,7 @@ return "ok"
                     for call_attempt in range(LLM_CALL_RETRIES + 1):
                         try:
                             response = await asyncio.wait_for(
-                                llm_chat(model, messages, openai_tools),
+                                llm_chat(model, messages, openai_tools, temperature=run.temperature),
                                 timeout=LLM_CALL_TIMEOUT,
                             )
                             break
@@ -1059,6 +1297,13 @@ return "ok"
                     m.total_tokens_in += usage.get("prompt_tokens", 0)
                     m.total_tokens_out += usage.get("completion_tokens", 0)
                     m.max_context_tokens = max(m.max_context_tokens, usage.get("prompt_tokens", 0))
+
+                    # Per-eval token cap guardrail
+                    if m.total_tokens_in > run.max_tokens_per_eval:
+                        logger.warning(f"[{ev.scenario_name}] Token cap exceeded: {m.total_tokens_in} > {run.max_tokens_per_eval}")
+                        m.error = f"token_budget_exceeded: {m.total_tokens_in} tokens"
+                        m.error_category = "token_budget_exceeded"
+                        break
 
                     choice = response["choices"][0]
                     message = choice["message"]
@@ -1080,10 +1325,31 @@ return "ok"
                                 args = json.loads(func["arguments"])
                             except json.JSONDecodeError:
                                 args = {}
+                            # Helpers v2: inject H into every execute_luau so the model never
+                            # script_reads SpatialHelpers or forgets require().
+                            if run.helpers_code and tool_name == "execute_luau":
+                                code = args.get("code", "") or ""
+                                inject = "local H = require(game.ReplicatedStorage.SpatialHelpers)\n"
+                                if code and "ReplicatedStorage.SpatialHelpers" not in code:
+                                    args = dict(args)
+                                    args["code"] = inject + code
+                            # Primitives: inject P into every execute_luau
+                            if run.primitives_code and tool_name == "execute_luau":
+                                code = args.get("code", "") or ""
+                                inject = "local P = require(game.ReplicatedStorage.PartPrimitives)\n"
+                                if code and "ReplicatedStorage.PartPrimitives" not in code:
+                                    args = dict(args)
+                                    args["code"] = inject + code
                             # execute_luau that creates/modifies scripts counts as edit
                             if tool_name == "execute_luau":
                                 code = args.get("code", "")
-                                if "Instance.new" in code or ".Source" in code or "multi_edit" in code:
+                                edit_markers = (
+                                    "Instance.new", ".Source", "multi_edit",
+                                    "H.block", "H.cyl", "H.ball", "H.wedge",
+                                    "P.block", "P.cyl", "P.ball", "P.wedge",
+                                    "P.wall", "P.roof", "P.limb", "P.stack", "P.floor",
+                                )
+                                if any(marker in code for marker in edit_markers):
                                     m.edit_count += 1
                             # Handle skill_view locally (not an MCP tool)
                             if tool_name == "skill_view" and run.skill_loader:
@@ -1102,7 +1368,7 @@ return "ok"
                                         logger.warning(f"[{ev.scenario_name}] tool {func['name']} returned error: {tool_out[:200]}")
                                 except Exception as e:
                                     err_str = str(e) or type(e).__name__
-                                    logger.warning(f"[{ev.scenario_name}] tool {func["name"]} failed: {err_str[:200]}")
+                                    logger.warning(f"[{ev.scenario_name}] tool {func['name']} failed: {err_str[:200]}")
                                     if "ClosedResource" in err_str or "BrokenResource" in err_str:
                                         # MCP connection is dead, no point retrying
                                         tool_out = f"Tool error: MCP connection closed: {e}"
@@ -1116,12 +1382,15 @@ return "ok"
                                         tool_out = get_tool_text(result)
                                         tool_is_err = is_tool_error(result, tool_out)
                                         track_tool_error(m, func["name"], tool_is_err)
-                                        logger.info(f"[{ev.scenario_name}] tool {func["name"]} retry OK (isError={tool_is_err})")
+                                        logger.info(f"[{ev.scenario_name}] tool {func['name']} retry OK (isError={tool_is_err})")
                                     except Exception as e2:
                                         tool_out = f"Tool error: {e2}"
                                         m.tool_errors += 1
-                                        logger.warning(f"[{ev.scenario_name}] tool {func["name"]} retry fail: {str(e2)[:200]}")
+                                        logger.warning(f"[{ev.scenario_name}] tool {func['name']} retry fail: {str(e2)[:200]}")
 
+                            # Truncate tool results to prevent context bloat
+                            if len(tool_out) > 4000:
+                                tool_out = tool_out[:4000] + "\n... [truncated, full result in tool log]"
                             messages.append({
                                 "role": "tool",
                                 "tool_call_id": tc["id"],
@@ -1137,55 +1406,150 @@ return "ok"
                 m.rounds_used = round_idx + 1
                 m.time_breakdown["llm_ms"] = m.llm_latency_ms
 
-                # 8. Take screenshot if requested
+                # 9. Re-inject LoadedCode + EvalUtils (LLM may have wiped them)
+                await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": ENSURE_LOADED_CODE}, m)
+
+                # 10. Exit play mode if LLM left Studio in it
+                try:
+                    await session.call_tool("start_stop_play", {"is_start": False})
+                    await asyncio.sleep(3)
+                except Exception:
+                    pass
+
+                # 10a. Run StructuralFixer if enabled (after build, before screenshots)
+                if run.fixer and run.fixer_code:
+                    try:
+                        fixer_lua = f"""
+local NL = string.char(10)
+local mod = Instance.new("ModuleScript")
+mod.Name = "_StructuralFixer"
+mod.Source = [==[{run.fixer_code}]==]
+mod.Parent = game
+local ok, Fixer = pcall(require, mod)
+mod:Destroy()
+if not ok then return "ERROR: " .. tostring(Fixer) end
+local report = Fixer.fix()
+local result = report.summary or "done"
+for _, d in ipairs(report.details or {{}}) do
+    result = result .. NL .. "  " .. d
+end
+return result
+"""
+                        fixer_result, _ = await harness_call_tool(
+                            session, "execute_luau",
+                            {"datamodel_type": "Edit", "code": fixer_lua}, m
+                        )
+                        fixer_text = get_tool_text(fixer_result) or ""
+                        logger.info(f"  StructuralFixer: {fixer_text[:200]}")
+                        m.fixer_report = fixer_text
+                    except Exception as e:
+                        logger.warning(f"  StructuralFixer failed: {e}")
+                        m.fixer_report = f"FIXER_ERROR: {e}"
+
+                # 10b. Run check_scene (edit mode) — gate before screenshots/judge
+                # Skip entirely in --no-gate mode (human is the judge)
+                if run.no_gate:
+                    m.scene_passed = None
+                    logger.info(f"  check_scene skipped (--no-gate)")
+                else:
+                    check_scene_lua = f"""
+local evalMod = Instance.new("ModuleScript")
+evalMod.Name = "_HarnessEvalCheck"
+evalMod.Source = [==[{ev.script}]==]
+evalMod.Parent = game
+local ok, eval = pcall(require, evalMod)
+evalMod:Destroy()
+if not ok then return "false|PARSE_ERROR: " .. tostring(eval) end
+if not eval.check_scene then return "true|NO_CHECK" end
+local cok, cerr = pcall(eval.check_scene)
+if cok then return "true|pass" else return "false|" .. tostring(cerr) end
+"""
+                    scene_result, _ = await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": check_scene_lua}, m)
+                    scene_text = get_tool_text(scene_result) or "false|no_response"
+                    m.scene_passed = scene_text.startswith("true")
+                    if not m.scene_passed:
+                        m.error = f"check_scene failed: {scene_text}"
+
+                # 10b-screenshots. Capture screenshots EVEN IF gate failed, for diagnostic purposes.
+                # Gate-failed evals still get screenshots but no judge scoring.
                 if run.screenshots:
                     try:
-                        ss, _ = await harness_call_tool(session, "screen_capture", {"capture_id": ev.scenario_name}, m)
+                        if ev.screenshot_type == "ui":
+                            await session.call_tool("start_stop_play", {"is_start": True})
+                            await asyncio.sleep(3)
+                            ss, _ = await harness_call_tool(session, "screen_capture", {"capture_id": ev.scenario_name}, m)
+                            await session.call_tool("start_stop_play", {"is_start": False})
+                            await asyncio.sleep(2)
+                        else:
+                            ss, _ = await harness_call_tool(session, "screen_capture", {"capture_id": ev.scenario_name}, m)
                         img_data = None
                         if ss and ss.content:
                             for c in ss.content:
-                                # MCP ImageContent has .data (base64) and .mimeType
                                 if hasattr(c, 'data') and c.data:
-                                    try:
-                                        img_data = base64.b64decode(c.data)
-                                        break
-                                    except Exception:
-                                        pass
-                                # MCP TextContent might contain base64 or data URI
+                                    try: img_data = base64.b64decode(c.data); break
+                                    except: pass
                                 if hasattr(c, 'text') and c.text:
                                     clean = c.text.strip()
-                                    if clean.startswith("data:"):
-                                        clean = clean.split(",", 1)[1] if "," in clean else clean
-                                    try:
-                                        img_data = base64.b64decode(clean)
-                                        break
-                                    except Exception:
-                                        pass
-                        if img_data and len(img_data) > 100:  # sanity check
+                                    if clean.startswith("data:"): clean = clean.split(",", 1)[1] if "," in clean else clean
+                                    try: img_data = base64.b64decode(clean); break
+                                    except: pass
+                        if img_data and len(img_data) > 100:
                             ss_dir = Path(run.run_dir) / "screenshots"
                             ss_dir.mkdir(parents=True, exist_ok=True)
                             ss_path = ss_dir / f"{ev.scenario_name}.png"
                             ss_path.write_bytes(img_data)
                             m.screenshot_path = str(ss_path)
                             logger.debug(f"  Screenshot saved: {ss_path}")
-                        else:
-                            logger.debug(f"  Screenshot: no image data in response")
                     except Exception as e:
                         logger.debug(f"  Screenshot failed: {e}")
 
+                # 10c. Run check_game (play mode) via StudioTestService bridge
+                if run.no_gate:
+                    m.game_passed = None
+                    logger.info(f"  check_game skipped (--no-gate)")
+                elif m.scene_passed is not False:
+                    if ev.check_game_empty:
+                        m.game_passed = None
+                        logger.info(f"  check_game skipped (empty body)")
+                    else:
+                        try:
+                            game_text = await run_check_game_sts(session, ev, m)
+                            if game_text is None:
+                                m.game_passed = None
+                                logger.info(f"  check_game skipped (bridge unavailable)")
+                            elif game_text.startswith("skip"):
+                                m.game_passed = None
+                                logger.info(f"  check_game skipped")
+                            else:
+                                m.game_passed = game_text.startswith("true")
+                                if not m.game_passed:
+                                    m.error = f"check_game failed: {game_text}"
+                        except Exception as e:
+                            m.game_passed = False
+                            m.error = f"Play mode error: {str(e) or type(e).__name__}"
+
+                # In --no-gate mode, passed = True (everything captured for human review)
+                if run.no_gate:
+                    m.passed = True
+                else:
+                    m.passed = (m.scene_passed is True) and (m.game_passed is not False)
+
+                # 11. Visual pipeline: screenshots + structure dump for ALL evals
+                # Judge scoring only for gate-passed evals.
                 _ss_start = time.time()
-                # 8b. Visual bench: camera framing + multi-screenshot (all angles captured for display, judge gets only first)
-                if ev.screenshot_type and m.scene_passed is not False:
+
+                # 11b. Visual bench: camera framing + multi-screenshot (all evals)
+                if ev.screenshot_type:
                     try:
                         if ev.screenshot_type == "build":
                             bbox_lua = """
 local parts = {}
 for _, obj in ipairs(workspace:GetChildren()) do
-    if obj:IsA("BasePart") and obj.Name ~= "Baseplate" then
+    if obj:IsA("BasePart") and obj.Name ~= "Baseplate" and not obj:IsA("Terrain") and obj.Name ~= "SpawnLocation" then
         table.insert(parts, obj)
-    elseif obj:IsA("Model") then
+    elseif obj:IsA("Folder") or obj:IsA("Model") or obj:IsA("Configuration") then
         for _, d in ipairs(obj:GetDescendants()) do
-            if d:IsA("BasePart") then table.insert(parts, d) end
+            if d:IsA("BasePart") and not d:IsA("Terrain") then table.insert(parts, d) end
         end
     end
 end
@@ -1211,14 +1575,15 @@ return string.format("%.1f|%.1f|%.1f|%.1f|%d", cx, cy, cz, maxDim, #parts)
                                 {"datamodel_type": "Edit", "code": bbox_lua}, m
                             )
                             bx = (bbox_text or "").split("|")
-                            if len(bx) >= 4:
+                            if len(bx) >= 4 and int(bx[4]) > 0:
                                 cx, cy, cz, maxDim = float(bx[0]), float(bx[1]), float(bx[2]), float(bx[3])
                                 await harness_call_tool(session, "execute_luau",
                                     {"datamodel_type": "Edit", "code": 'workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable'}, m)
+                                await asyncio.sleep(0.5)
                                 angles = [
-                                    f'workspace.CurrentCamera.CFrame = CFrame.lookAt(Vector3.new({cx + maxDim*1.5}, {cy + maxDim*0.5}, {cz + maxDim*1.5}), Vector3.new({cx}, {cy}, {cz}))',
-                                    f'workspace.CurrentCamera.CFrame = CFrame.lookAt(Vector3.new({cx - maxDim*1.5}, {cy + maxDim*0.5}, {cz + maxDim*1.5}), Vector3.new({cx}, {cy}, {cz}))',
-                                    f'workspace.CurrentCamera.CFrame = CFrame.lookAt(Vector3.new({cx}, {cy + maxDim*2.5}, {cz + 0.1}), Vector3.new({cx}, {cy}, {cz}))',
+                                    f'workspace.CurrentCamera.CFrame = CFrame.lookAt(Vector3.new({cx + maxDim*0.8}, {cy + maxDim*0.4}, {cz + maxDim*0.8}), Vector3.new({cx}, {cy}, {cz}))',
+                                    f'workspace.CurrentCamera.CFrame = CFrame.lookAt(Vector3.new({cx - maxDim*0.8}, {cy + maxDim*0.4}, {cz + maxDim*0.8}), Vector3.new({cx}, {cy}, {cz}))',
+                                    f'workspace.CurrentCamera.CFrame = CFrame.lookAt(Vector3.new({cx}, {cy + maxDim*1.2}, {cz + 0.1}), Vector3.new({cx}, {cy}, {cz}))',
                                 ]
                                 for ai, cam_lua in enumerate(angles):
                                     await harness_call_tool(session, "execute_luau",
@@ -1243,6 +1608,8 @@ return string.format("%.1f|%.1f|%.1f|%.1f|%d", cx, cy, cz, maxDim, #parts)
                                         ss_path = ss_dir / f"{ev.scenario_name}_a{ai}.png"
                                         ss_path.write_bytes(img_data)
                                         m.screenshot_paths.append(str(ss_path))
+                            else:
+                                logger.info(f"  No parts found for bbox, skipping multi-angle screenshots")
                         elif ev.screenshot_type == "ui":
                             if m.screenshot_path:
                                 m.screenshot_paths.append(m.screenshot_path)
@@ -1250,25 +1617,34 @@ return string.format("%.1f|%.1f|%.1f|%.1f|%d", cx, cy, cz, maxDim, #parts)
                         logger.warning(f"  Visual bench screenshot failed: {e}")
 
                 m.time_breakdown["screenshot_ms"] = int((time.time() - _ss_start) * 1000)
-                # 8c. Structure dump
-                if ev.screenshot_type and m.scene_passed is not False:
+
+                # 11c. Structure dump (all evals)
+                if ev.screenshot_type:
                     try:
                         if ev.screenshot_type == "ui":
                             dump_lua = """
 local function dumpTree(parent, depth)
+    local NL = string.char(10)
     local result = ""
     for _, child in ipairs(parent:GetChildren()) do
         local props = ""
         if child:IsA("GuiObject") then
-            props = string.format("Size=%s Pos=%s", tostring(child.Size), tostring(child.Position))
+            props = string.format("Size=%s Pos=%s ZIndex=%d Transp=%.2f", tostring(child.Size), tostring(child.Position), child.ZIndex, child.BackgroundTransparency)
         end
         if child:IsA("TextLabel") or child:IsA("TextButton") then
-            props = props .. " Text='" .. child.Text .. "'"
+            props = props .. string.format(" Text='%s' Font=%s TextSize=%d TextColor=%s", child.Text, tostring(child.Font), child.TextSize, tostring(child.TextColor3))
         end
         if child:IsA("Frame") then
             props = props .. " Bg=" .. tostring(child.BackgroundColor3)
         end
-        result = result .. string.rep("  ", depth) .. child.ClassName .. ":" .. child.Name .. " " .. props .. "\n"
+        for _, d in ipairs(child:GetChildren()) do
+            if d:IsA("UICorner") then
+                props = props .. string.format(" UICorner=%s", tostring(d.CornerRadius))
+            elseif d:IsA("UIStroke") then
+                props = props .. string.format(" UIStroke(color=%s thickness=%d)", tostring(d.Color), d.Thickness)
+            end
+        end
+        result = result .. string.rep("  ", depth) .. child.ClassName .. ":" .. child.Name .. " " .. props .. NL
         result = result .. dumpTree(child, depth + 1)
     end
     return result
@@ -1278,35 +1654,102 @@ return dumpTree(game:GetService("StarterGui"), 0)
                         else:
                             dump_lua = """
 local parts = {}
-for _, obj in ipairs(workspace:GetChildren()) do
-    if obj:IsA("BasePart") and obj.Name ~= "Baseplate" then
-        table.insert(parts, obj)
-    elseif obj:IsA("Model") then
-        for _, d in ipairs(obj:GetDescendants()) do
-            if d:IsA("BasePart") then table.insert(parts, d) end
+local NL = string.char(10)
+local function collect(parent, depth)
+    for _, obj in ipairs(parent:GetChildren()) do
+        if obj:IsA("BasePart") and obj.Name ~= "Baseplate" and not obj:IsA("Terrain") and obj.Name ~= "SpawnLocation" then
+            table.insert(parts, obj)
+        end
+        if obj:IsA("Folder") or obj:IsA("Model") or obj:IsA("Configuration") or obj:IsA("Accessory") then
+            collect(obj, depth + 1)
         end
     end
 end
+collect(workspace, 0)
 local result = ""
 for _, p in ipairs(parts) do
-    result = result .. string.format("%s:%s Pos=(%.1f,%.1f,%.1f) Size=(%.1f,%.1f,%.1f) Color=%s Transp=%.1f\n",
-        p.ClassName, p.Name, p.Position.X, p.Position.Y, p.Position.Z,
-        p.Size.X, p.Size.Y, p.Size.Z, tostring(p.BrickColor), p.Transparency)
+    local parentName = p.Parent and p.Parent.Name or "?"
+    local mat = tostring(p.Material)
+    result = result .. string.format("%s:%s parent=%s Pos=(%.1f,%.1f,%.1f) Size=(%.1f,%.1f,%.1f) Mat=%s Anchored=%s" .. NL,
+        p.ClassName, p.Name, parentName, p.Position.X, p.Position.Y, p.Position.Z,
+        p.Size.X, p.Size.Y, p.Size.Z, mat, tostring(p.Anchored))
 end
-return result
+
+-- Structural soundness checks
+local floating = {}
+local overlaps = {}
+local groundContact = false
+for i, p in ipairs(parts) do
+    local bottom = p.Position.Y - p.Size.Y/2
+    if bottom <= 0.5 then groundContact = true end
+    if bottom > 1.0 then
+        local supported = false
+        for _, q in ipairs(parts) do
+            if q ~= p then
+                local qtop = q.Position.Y + q.Size.Y/2
+                if math.abs(qtop - bottom) < 1.5 then
+                    local dx = math.abs(p.Position.X - q.Position.X)
+                    local dz = math.abs(p.Position.Z - q.Position.Z)
+                    if dx < (p.Size.X + q.Size.X)/2 and dz < (p.Size.Z + q.Size.Z)/2 then
+                        supported = true
+                        break
+                    end
+                end
+            end
+        end
+        if not supported then
+            table.insert(floating, p.Name .. "(y=" .. string.format("%.1f", bottom) .. ")")
+        end
+    end
+    for j = i+1, #parts do
+        local q = parts[j]
+        local dx = math.abs(p.Position.X - q.Position.X)
+        local dy = math.abs(p.Position.Y - q.Position.Y)
+        local dz = math.abs(p.Position.Z - q.Position.Z)
+        if dx < (p.Size.X + q.Size.X)/2 - 0.1 and
+           dy < (p.Size.Y + q.Size.Y)/2 - 0.1 and
+           dz < (p.Size.Z + q.Size.Z)/2 - 0.1 then
+            table.insert(overlaps, p.Name .. " <-> " .. q.Name)
+        end
+    end
+end
+local function summarize(items, limit)
+    local shown = {}
+    local count = math.min(#items, limit)
+    for i = 1, count do table.insert(shown, items[i]) end
+    if #items > limit then
+        table.insert(shown, "... +" .. tostring(#items - limit) .. " more")
+    end
+    return table.concat(shown, ", ")
+end
+local flags = "--- structural_flags ---" .. NL
+flags = flags .. "floating_parts:" .. #floating .. NL
+if #floating > 0 then flags = flags .. "  " .. summarize(floating, 50) .. NL end
+flags = flags .. "overlaps:" .. #overlaps .. NL
+if #overlaps > 0 then flags = flags .. "  " .. summarize(overlaps, 50) .. NL end
+flags = flags .. "ground_contact:" .. tostring(groundContact) .. NL
+flags = flags .. "total_parts:" .. #parts .. NL
+return flags .. "parts:" .. #parts .. NL .. result
 """
-                        _, dump_text = await harness_call_tool(
-                            session, "execute_luau",
-                            {"datamodel_type": "Edit", "code": dump_lua}, m
-                        )
-                        m.structure_dump = (dump_text or "")[:5000]
+                        dump_text = ""
+                        for dump_attempt in range(3):
+                            _, dump_text = await harness_call_tool(
+                                session, "execute_luau",
+                                {"datamodel_type": "Edit", "code": dump_lua}, m
+                            )
+                            if dump_text and "Failed to parse" not in dump_text:
+                                break
+                            logger.warning(f"  Structure dump attempt {dump_attempt+1} failed, retrying...")
+                            await asyncio.sleep(1)
+                        m.structure_dump = (dump_text or "")[:15000]
                     except Exception as e:
                         logger.warning(f"  Structure dump failed: {e}")
 
-                # 8c2. Capture created scripts (for future code quality analysis)
-                if ev.screenshot_type and m.scene_passed is not False:
+                # 11d. Capture created scripts (all evals)
+                if ev.screenshot_type:
                     try:
                         scripts_lua = """
+local NL = string.char(10)
 local scripts = {}
 for _, obj in ipairs(game:GetDescendants()) do
     if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
@@ -1315,7 +1758,6 @@ for _, obj in ipairs(game:GetDescendants()) do
         end
     end
 end
--- Also check StarterPlayerScripts
 local StarterPlayer = game:GetService("StarterPlayer")
 if StarterPlayer then
     for _, d in ipairs(StarterPlayer:GetDescendants()) do
@@ -1329,27 +1771,37 @@ local result = ""
 for name, src in pairs(scripts) do
     count = count + 1
     if count <= 10 then
-        result = result .. "=== " .. name .. " ===\n" .. src:sub(1, 500) .. "\n\n"
+        result = result .. "=== " .. name .. " ===" .. NL .. src:sub(1, 500) .. NL .. NL
     end
 end
 return tostring(count) .. "|" .. result
 """
-                        _, scripts_text = await harness_call_tool(
-                            session, "execute_luau",
-                            {"datamodel_type": "Edit", "code": scripts_lua}, m
-                        )
+                        scripts_text = ""
+                        for script_attempt in range(3):
+                            _, scripts_text = await harness_call_tool(
+                                session, "execute_luau",
+                                {"datamodel_type": "Edit", "code": scripts_lua}, m
+                            )
+                            if scripts_text and "Failed to parse" not in scripts_text:
+                                break
+                            logger.warning(f"  Script capture attempt {script_attempt+1} failed, retrying...")
+                            await asyncio.sleep(1)
                         if scripts_text and "|" in scripts_text:
                             parts = scripts_text.split("|", 1)
                             m.created_scripts["_count"] = int(parts[0])
-                            m.created_scripts["_sources"] = parts[1][:10000]  # cap at 10K
+                            m.created_scripts["_sources"] = parts[1][:10000]
                     except Exception as e:
                         logger.warning(f"  Script capture failed: {e}")
 
-                # 8d. Judge scoring (only send first screenshot to judge — 45° front angle)
-                if run.judge_enabled and run.judge and ev.judge_rubric and m.scene_passed is not False:
+                # 11e. Judge scoring — ONLY for gate-passed evals
+                if m.scene_passed is not False and run.judge_enabled and run.judge and ev.judge_rubric:
                     if m.screenshot_paths:
                         try:
-                            judge_screenshots = m.screenshot_paths[:1]  # judge sees only the first angle
+                            primary_idx = {"front": 0, "side": 1, "top": 2}.get(ev.screenshot_primary, 0)
+                            if primary_idx < len(m.screenshot_paths):
+                                judge_screenshots = [m.screenshot_paths[primary_idx]]
+                            else:
+                                judge_screenshots = m.screenshot_paths[:1]
                             judge_result = await run.judge.score(
                                 task_prompt=ev.prompt_text,
                                 rubric=ev.judge_rubric,
@@ -1363,57 +1815,6 @@ return tostring(count) .. "|" .. result
                             logger.info(f"  Judge: overall={m.judge_overall} scores={m.judge_scores}")
                         except Exception as e:
                             logger.warning(f"  Judge scoring failed: {e}")
-
-                # 9. Re-inject LoadedCode + EvalUtils (LLM may have wiped them)
-                await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": ENSURE_LOADED_CODE}, m)
-
-                # 10. Exit play mode if LLM left Studio in it
-                try:
-                    await session.call_tool("start_stop_play", {"is_start": False})
-                    await asyncio.sleep(3)
-                except Exception:
-                    pass
-
-                # 10b. Run check_scene (edit mode) via ModuleScript
-                check_scene_lua = f"""
-local evalMod = Instance.new("ModuleScript")
-evalMod.Name = "_HarnessEvalCheck"
-evalMod.Source = [==[{ev.script}]==]
-evalMod.Parent = game
-local ok, eval = pcall(require, evalMod)
-evalMod:Destroy()
-if not ok then return "false|PARSE_ERROR: " .. tostring(eval) end
-if not eval.check_scene then return "true|NO_CHECK" end
-local cok, cerr = pcall(eval.check_scene)
-if cok then return "true|pass" else return "false|" .. tostring(cerr) end
-"""
-                scene_result, _ = await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": check_scene_lua}, m)
-                scene_text = get_tool_text(scene_result) or "false|no_response"
-                m.scene_passed = scene_text.startswith("true")
-                if not m.scene_passed:
-                    m.error = f"check_scene failed: {scene_text}"
-
-                # 10. Run check_game (play mode) via StudioTestService bridge
-                # This executes check_game in the game SERVER context, not plugin context.
-                # Required for server-only APIs like LoadCharacter().
-                if not m.error or m.scene_passed:
-                    try:
-                        game_text = await run_check_game_sts(session, ev, m)
-                        if game_text is None:
-                            m.game_passed = None
-                            logger.info(f"  check_game skipped (bridge unavailable)")
-                        elif game_text.startswith("skip"):
-                            m.game_passed = None
-                            logger.info(f"  check_game skipped")
-                        else:
-                            m.game_passed = game_text.startswith("true")
-                            if not m.game_passed:
-                                m.error = f"check_game failed: {game_text}"
-                    except Exception as e:
-                        m.game_passed = False
-                        m.error = f"Play mode error: {str(e) or type(e).__name__}"
-
-                m.passed = (m.scene_passed is True) and (m.game_passed is not False)
 
     except asyncio.TimeoutError:
         m.error = f"Eval timed out after {run.eval_timeout}s"
@@ -1567,14 +1968,24 @@ def parse_args():
     p.add_argument("--api-key", default=None, help="API key (or set LLM_API_KEY env)")
     p.add_argument("--skills-dir", default=None, help="Path to skills source dir for skills mode (default: roblox-brain/skills)")
     p.add_argument("--skills", action="store_true", help="--skills mode: model gets skill index + skill_view tool, loads skills itself")
+    p.add_argument("--solver", action="store_true", help="Solver mode: upload SpatialSolver.lua to ReplicatedStorage + inject spec vocabulary into system prompt")
+    p.add_argument("--solver-path", default=None, help="Path to SpatialSolver.lua (default: ../spatial-solver/SpatialSolver.lua)")
     p.add_argument("--pass-n", type=int, default=1, choices=[1, 5], help="Pass@1 or Pass@5")
     p.add_argument("--max-rounds", type=int, default=25, help="Max LLM tool-use rounds per eval")
-    p.add_argument("--startup-wait", type=int, default=20, help="Seconds to wait for Studio")
+    p.add_argument("--startup-wait", type=int, default=45, help="Seconds to wait for Studio")
     p.add_argument("--output-dir", default="results", help="Output directory")
     p.add_argument("--screenshots", action="store_true", help="Capture screenshots")
     p.add_argument("--verbose", action="store_true", help="Verbose logging")
     p.add_argument("--eval-filter", default=None, help="Regex filter for eval scenario names")
     p.add_argument("--eval-timeout", type=int, default=600, help="Per-eval timeout in seconds")
+    p.add_argument("--no-gate", action="store_true", help="Skip check_scene gate entirely. Screenshots + structure dump still captured. Use when human is the judge.")
+    p.add_argument("--fixer", action="store_true", help="Run legacy/StructuralFixer.lua after model build, before screenshots. Fixes floating/overlapping parts.")
+    p.add_argument("--helpers", action="store_true", help="Upload legacy/SpatialHelpers.lua to ReplicatedStorage + inject helper API into system prompt. Model calls helper functions instead of computing coordinates.")
+    p.add_argument("--helpers-path", default=None, help="Path to SpatialHelpers.lua (default: ./legacy/SpatialHelpers.lua)")
+    p.add_argument("--primitives", action="store_true", help="Upload PartPrimitives.lua to ReplicatedStorage + inject composition API into system prompt. Model calls P.wall/P.roof/P.limb/P.stack for connected structures.")
+    p.add_argument("--primitives-path", default=None, help="Path to PartPrimitives.lua (default: ./PartPrimitives.lua)")
+    p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
+    p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
     return p.parse_args()
 
 
@@ -1639,6 +2050,25 @@ async def main():
             judge = VisualJudge(jm, jb, jk)
             judge_enabled = True
             logger.info(f"Visual judge enabled: model={jm}")
+            # Startup validation ping: send a 1x1 pixel to verify the judge API works
+            try:
+                import tempfile as _tf
+                _tiny_png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82'
+                _tf_path = Path(_tf.gettempdir()) / "_judge_ping.png"
+                _tf_path.write_bytes(_tiny_png)
+                await judge.score(
+                    task_prompt="test ping",
+                    rubric={"correctness": "test"},
+                    screenshots=[str(_tf_path)],
+                    structure_dump="",
+                )
+                _tf_path.unlink(missing_ok=True)
+                logger.info("Judge validation ping successful")
+            except Exception as e:
+                logger.error(f"Judge validation ping FAILED: {e}")
+                print(f"ERROR: Judge API validation failed: {e}")
+                print("Fix judge configuration before running evals. Aborting.")
+                sys.exit(1)
         else:
             logger.warning("--judge requested but JUDGE_MODEL/JUDGE_API_BASE/JUDGE_API_KEY not configured")
 
@@ -1656,10 +2086,65 @@ async def main():
         skills_index=skills_index,
         judge=judge,
         judge_enabled=judge_enabled,
+        temperature=args.temperature,
+        max_tokens_per_eval=args.max_tokens_per_eval,
+        no_gate=args.no_gate,
+        fixer=args.fixer,
     )
 
+    # Fixer mode: load StructuralFixer.lua
+    if args.fixer:
+        fixer_path = Path(__file__).parent / "legacy" / "StructuralFixer.lua"
+        if not fixer_path.exists():
+            print(f"Error: StructuralFixer.lua not found at {fixer_path}")
+            sys.exit(1)
+        run.fixer_code = fixer_path.read_text(encoding="utf-8")
+        logger.info(f"StructuralFixer enabled: {len(run.fixer_code)} chars")
+
+    # Helpers mode: load SpatialHelpers.lua
+    if args.helpers:
+        helpers_path = Path(args.helpers_path) if args.helpers_path else (Path(__file__).parent / "legacy" / "SpatialHelpers.lua")
+        if not helpers_path.exists():
+            print(f"Error: SpatialHelpers.lua not found at {helpers_path}")
+            sys.exit(1)
+        run.helpers_code = helpers_path.read_text(encoding="utf-8")
+        logger.info(f"SpatialHelpers enabled: {len(run.helpers_code)} chars from {helpers_path}")
+
+    # Primitives mode: load PartPrimitives.lua
+    if args.primitives:
+        primitives_path = Path(args.primitives_path) if args.primitives_path else (Path(__file__).parent / "PartPrimitives.lua")
+        if not primitives_path.exists():
+            print(f"Error: PartPrimitives.lua not found at {primitives_path}")
+            sys.exit(1)
+        run.primitives_code = primitives_path.read_text(encoding="utf-8")
+        logger.info(f"PartPrimitives enabled: {len(run.primitives_code)} chars from {primitives_path}")
+
+    # Solver mode: load SpatialSolver.lua + build spec vocabulary prompt
+    solver_code = None
+    solver_enabled = args.solver
+    if solver_enabled:
+        solver_path = args.solver_path or str(Path(__file__).parent.parent / "spatial-solver" / "SpatialSolver.lua")
+        solver_path = Path(solver_path)
+        if not solver_path.exists():
+            print(f"Error: SpatialSolver.lua not found at {solver_path}")
+            sys.exit(1)
+        solver_code = solver_path.read_text(encoding="utf-8")
+        run.solver_code = solver_code
+        logger.info(f"Solver mode enabled: {len(solver_code)} chars from {solver_path}")
+
     # Generate run directory: {mode}_{date}_{time}
-    mode = "skills" if skill_loader else "vanilla"
+    if skill_loader:
+        mode = "skills"
+    elif solver_enabled:
+        mode = "solver"
+    elif args.helpers:
+        mode = "helpers"
+    elif args.primitives:
+        mode = "primitives"
+    else:
+        mode = "vanilla"
+    if args.fixer:
+        mode += "_fixer"
     run_id = f"{mode}_{datetime.now().strftime('%m%d_%H%M')}"
     run_dir = f"{args.output_dir}/{run_id}"
     Path(run_dir).mkdir(parents=True, exist_ok=True)
@@ -1667,8 +2152,25 @@ async def main():
     run.run_dir = run_dir
     logger.info(f"Run directory: {run_dir}")
 
+    run_config = {
+        "pass_n": run.pass_n,
+        "max_rounds": run.max_tool_rounds,
+        "eval_timeout": run.eval_timeout,
+        "screenshots": run.screenshots,
+        "temperature": run.temperature,
+        "max_tokens_per_eval": run.max_tokens_per_eval,
+        "no_gate": run.no_gate,
+        "helpers": args.helpers,
+        "primitives": args.primitives,
+        "solver": solver_enabled,
+        "fixer": args.fixer,
+        "eval_filter": args.eval_filter,
+        "evals_dir": str(Path(args.evals_dir).resolve()),
+        "places_dir": str(Path(args.places_dir).resolve()),
+    }
+
     # Parse eval files
-    eval_files = sorted(Path(args.evals_dir).glob("*.lua"))
+    eval_files = sorted(Path(args.evals_dir).rglob("*.lua"))
     if not eval_files:
         print(f"No .lua files found in {args.evals_dir}")
         sys.exit(1)
@@ -1689,17 +2191,19 @@ async def main():
     manifest = {
         "run_id": run_id,
         "model": model.name,
-        "config": {
-            "pass_n": run.pass_n,
-            "max_rounds": run.max_tool_rounds,
-            "eval_timeout": run.eval_timeout,
-            "screenshots": run.screenshots,
-        },
+        "config": run_config,
         "start_time": datetime.now().isoformat(),
+        "mode": mode,
     }
     if skill_loader:
         manifest["skills_mode"] = "skills"
         manifest["skills_source"] = str(skill_loader.source)
+    elif solver_enabled:
+        manifest["skills_mode"] = "solver"
+    elif args.helpers:
+        manifest["skills_mode"] = "helpers"
+    elif args.primitives:
+        manifest["skills_mode"] = "primitives"
     else:
         manifest["skills_mode"] = "vanilla"
     if judge_enabled:
@@ -1763,6 +2267,22 @@ async def main():
                 results.append(best)
             else:
                 results.append(run_results[0])
+
+            # Incremental save: write results.json after each eval
+            try:
+                inc_summary = aggregate_results(results, run.pass_n)
+                inc_output = {
+                    "summary": inc_summary,
+                    "model": {"name": model.name, "api_base": model.api_base},
+                    "config": run_config,
+                    "mode": mode,
+                    "evals": [asdict(r) for r in results],
+                }
+                inc_path = Path(run.run_dir) / "results.json"
+                inc_path.write_text(json.dumps(inc_output, indent=2))
+            except Exception as e:
+                logger.warning(f"Incremental save failed: {e}")
+
         return results
 
     # Run expanded evals
@@ -1787,7 +2307,8 @@ async def main():
     output = {
         "summary": summary,
         "model": {"name": model.name, "api_base": model.api_base},
-        "config": {"pass_n": run.pass_n, "max_rounds": run.max_tool_rounds},
+        "config": run_config,
+        "mode": mode,
         "evals": [asdict(r) for r in all_results],
     }
 

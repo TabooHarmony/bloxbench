@@ -15,16 +15,9 @@ local eval: BaseEval = {
         {
             {
                 role = "user",
-                content = [[Create a loading screen shown when players join the game.
+                content = [[Create a loading screen for a space-themed tycoon game.
 
-Layout:
-- Full-screen dark background Frame (RGB 15,15,20), covers entire screen
-- Game title TextLabel: "Galaxy Tycoon" at top, centered, font GothamBlack, size 42, color white
-- Loading bar container: Frame 400x20, centered horizontally, positioned ~60% down the screen, background RGB 40,40,50
-- Loading bar fill: Frame inside the container, width 60% of container, height 100%, background RGB 100,200,255, UICorner radius 4
-- Tip TextLabel below the bar: "Tip: Press E to interact with objects.", size 16, color RGB 150,150,160
-
-ScreenGui in StarterGui, IgnoreGuiInset = true. No close button — this is a loading screen.]],
+Show the game title at the top. In the middle, show a loading bar that is partially filled. Below the loading bar, show a tip for new players. Use a dark, space-themed color scheme with a bright accent color on the loading bar fill. The background should cover the entire screen with no close button.]],
                 request_id = "vb_ui_004"
             }
         }
@@ -98,7 +91,33 @@ eval.check_scene = function()
         end
     end
     assert(foundBar, "No loading bar-shaped frame found (wide and short)")
-end
+
+    -- Strengthened: full-screen background coverage
+    local function findFullScreenFrame(sg)
+        for _, d in ipairs(sg:GetDescendants()) do
+            if d:IsA("Frame") then
+                local sz = d.AbsoluteSize
+                if sz.X >= 500 and sz.Y >= 300 then return d end
+            end
+        end
+        return nil
+    end
+    local bg = findFullScreenFrame(screenGui)
+    assert(bg, "No full-screen background frame found")
+
+    -- Strengthened: title above loading bar above tip
+    local title = nil
+    local tip = nil
+    for _, d in ipairs(screenGui:GetDescendants()) do
+        if d:IsA("TextLabel") then
+            local t = string.lower(d.Text)
+            if string.find(t, "galaxy") or string.find(t, "tycoon") then title = d end
+            if string.find(t, "tip") then tip = d end
+        end
+    end
+    if title and tip then
+        assert(title.AbsolutePosition.Y < tip.AbsolutePosition.Y, "Title should be above tip text")
+    endend
 
 eval.check_game = function()
 end
