@@ -39,6 +39,8 @@
 
     Limb-specific opts:
       origin = <BasePart>              — where the chain starts
+      anchor = "top" | "bottom" | "left" | "right" | "front" | "back"
+                                      — origin face used as the chain start
       angle = degrees                  — initial upward angle
       yaw = degrees                    — horizontal rotation
       curve = degrees                  — per-segment angle change (for tails)
@@ -690,7 +692,8 @@ end
 
     segments = {{w, h, d}, {w, h, d}, ...}  sizes of each segment (tapering)
     opts:
-      origin = <part>       where chain starts (seats on top of this)
+      origin = <part>       where chain starts
+      anchor = "top"         origin face used as the chain start
       angle = degrees       initial upward angle from horizontal (0 = horizontal, 90 = straight up)
       yaw = degrees         horizontal rotation (0 = +X direction)
       curve = degrees       per-segment angle change (positive = curves up)
@@ -705,13 +708,30 @@ function P.limb(segments, opts)
     local yaw = math.rad(opts.yaw or 0)
     local curve = math.rad(opts.curve or 0)
 
-    -- starting position: on top of origin
+    -- starting position: on the selected origin face
     local startX, startY, startZ
     if opts.origin then
         local tp, ts = opts.origin.Position, opts.origin.Size
         startX = tp.X
-        startY = tp.Y + ts.Y * 0.5
         startZ = tp.Z
+        local anchor = string.lower(tostring(opts.anchor or "top"))
+        if anchor == "bottom" then
+            startY = tp.Y - ts.Y * 0.5
+        elseif anchor == "left" then
+            startX = tp.X - ts.X * 0.5
+            startY = tp.Y
+        elseif anchor == "right" then
+            startX = tp.X + ts.X * 0.5
+            startY = tp.Y
+        elseif anchor == "front" then
+            startZ = tp.Z + ts.Z * 0.5
+            startY = tp.Y
+        elseif anchor == "back" then
+            startZ = tp.Z - ts.Z * 0.5
+            startY = tp.Y
+        else
+            startY = tp.Y + ts.Y * 0.5
+        end
     else
         startX, startY, startZ = 0, 0, 0
     end
