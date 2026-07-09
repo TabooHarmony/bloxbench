@@ -12,18 +12,19 @@ Measure whether the small `PartPrimitives` API improves connected Roblox constru
 - structural dump now emits flags before the capped part listing
 - run metadata records the actual experiment configuration
 - legacy helper and fixer files are separated under `legacy/`
-- post-patch local validation is still pending
-- no post-patch Studio smoke run has been executed
+- post-patch local validation passed
+- the targeted Studio smoke completed, but visual review did not promote the arm to a full run
 
 ## next sequence
 
 1. run local syntax and diff checks
 2. run the targeted cottage + dragon primitive smoke test
 3. inspect screenshots, structural flags, edit counts, and run metadata
-4. fix only issues demonstrated by that smoke run
-5. run the controlled 10-building primitive experiment
-6. review screenshots manually before comparing against vanilla
-7. decide whether to keep primitives v1, revise the API, or stop the arm
+4. verify primitive usage and fix only issues demonstrated by the smoke
+5. rerun dragon as a focused follow-up
+6. run the controlled 10-building primitive experiment only after review
+7. review screenshots manually before comparing against vanilla
+8. decide whether to keep primitives v1, revise the API, or stop the arm
 
 ## active constraints
 

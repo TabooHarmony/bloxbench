@@ -35,7 +35,7 @@ Recent primitive and harness patches have been applied. The important changes ar
 - run manifests record the experiment configuration
 - primitive constructor calls count as edits
 
-Local syntax and Studio validation after those patches are pending. Do not treat the patch as experimentally validated yet.
+Local syntax checks passed. The targeted Studio smoke `primitives_0709_1321` completed, but visual review found disconnected dragon geometry and several cottage floating-detail flags. The primitive patch is not experimentally validated as a benchmark improvement yet.
 
 ## source map
 
@@ -69,4 +69,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-Run local checks first, then the targeted WinDev smoke. After the smoke, review the screenshots and structural flags manually before deciding whether to run all ten building evals.
+Inspect the dragon tool trace and primitive usage, then make only the smallest demonstrated fix. Rerun dragon before considering the full ten-building experiment. Keep the pulled smoke artifacts under `results_pull/primitives_0709_1321/`.
