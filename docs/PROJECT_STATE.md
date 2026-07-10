@@ -75,4 +75,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-The spatial observability prototype is retained as historical positive evidence. The focused actor/verifier condition repaired an isolated detached roof while vanilla made zero edits, but the verifier did not finish its report. Keep Spatial narrow and run one matched two-defect repair after verifying forced finalization. Do not promote it to a general construction system from this single positive.
+The spatial observability prototype is retained as historical positive evidence. The focused actor/verifier condition repaired an isolated detached roof while vanilla made zero edits, but the verifier did not finish its report. The matched two-defect follow-up produced the same physically incomplete artifact as vanilla at substantially higher cost. Freeze Spatial as a general intervention and redirect to a materially different path.

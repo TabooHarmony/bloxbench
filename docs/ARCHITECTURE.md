@@ -53,7 +53,7 @@ The harness writes these values into the run manifest and results metadata.
 
 `PartPrimitives.lua` is preserved for historical reproduction only. It is not an active research arm.
 
-The model-side decomposition protocol was tested and rejected. The repair-first spatial observability prototype is retained as a tool-research direction, not a benchmark arm. Its connected-component linter improved main-assembly repair but did not guarantee visually convincing attachments. Relation checking was not adopted, automatic post-edit feedback caused a visually bad early stop, and the cheap alternate model did not edit. A fresh-context actor/verifier condition produced one narrow positive on an isolated roof repair, so Spatial remains paused except for one two-defect verification spike.
+The model-side decomposition protocol was tested and rejected. The repair-first spatial observability prototype is retained as a tool-research direction, not a benchmark arm. Its connected-component linter improved main-assembly repair but did not guarantee visually convincing attachments. Relation checking was not adopted, automatic post-edit feedback caused a visually bad early stop, and the cheap alternate model did not edit. A fresh-context actor/verifier condition produced one narrow positive on an isolated roof repair, but its two-defect follow-up matched vanilla at higher cost and left the flag physically detached. Spatial is frozen except as historical evidence.
 
 `legacy/SpatialHelpers.lua` and `legacy/StructuralFixer.lua` are preserved for historical reproduction only. Their launchers are under `legacy/experiments/`. They are not the next research arm.
 

@@ -21,6 +21,7 @@ Close the rejected construction interventions, then use repair-first spatial exp
 - automatic post-edit feedback reduced rounds and tokens but produced a visually worse early stop
 - the cheap MiniMax M3 comparison inspected the scene but made zero edits
 - the corrected focused actor/verifier roof repair beat its vanilla control, but the verifier exhausted its read-only rounds without producing a report
+- the matched two-defect follow-up produced the same physically incomplete artifact as vanilla at substantially higher cost; Spatial is not promoted
 
 ## next sequence
 
@@ -28,8 +29,8 @@ Close the rejected construction interventions, then use repair-first spatial exp
 2. record the matched vanilla control, cottage replicate, and failed architecture smoke
 3. record the matched protocol run and its failed replicate
 4. preserve the spatial observability repair prototype and its matched evidence
-5. keep the construction-tool branch paused except for the narrow actor/verifier follow-up
-6. verify the forced verifier finalization, then run one matched two-defect repair before deciding whether Spatial expands
+5. freeze the actor/verifier Spatial branch after recording the narrow single-defect positive and the failed two-defect follow-up
+6. redirect effort to a materially different path, such as compile-once/repair or model-side task representation, rather than another verifier or linter variant
 
 ## active constraints
 
