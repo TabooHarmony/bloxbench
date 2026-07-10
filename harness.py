@@ -111,6 +111,7 @@ class RunConfig:
     auto_spatial_feedback: bool = False  # harness-injected post-edit state diff
     actor_verifier: bool = False  # fresh read-only verifier plus one repair pass
     compile_once_repair: bool = False  # one script-first edit plus one bounded correction pass
+    repair_contract: bool = False  # inject compact named task invariants
     existing_scene: bool = False  # eval setup provides a scene to inspect or repair
 
 
@@ -1432,6 +1433,16 @@ return "ok"
                         "\\n\\nThis is a bounded actor phase. Make the smallest repair needed for the named defect, "
                         "then stop. Do not redesign valid geometry. A separate verifier will inspect your result."
                     )
+                if run.repair_contract:
+                    actor_prompt += (
+                        "\\n\\n## Explicit repair contract\\n"
+                        "Required named structure: Foundation, TowerShaft, Door, LookoutPlatform, and battlements. "
+                        "Preserve valid existing geometry and do not add optional windows or unrelated decorative parts. "
+                        "The platform must be centered on and visibly connected to the shaft. Battlements must sit on "
+                        "the platform and form a readable lookout rim. If a flagpole and flag are present, the flag must "
+                        "visibly attach to the pole. Prefer correcting or removing only clearly disconnected upper "
+                        "pieces. Finish with one coherent repair script, not a sequence of partial edits."
+                    )
                 if run.compile_once_repair:
                     actor_prompt += (
                         "\\n\\nThis is the script-first pass. Inspect first, then make all intended changes in one complete "
@@ -1690,6 +1701,15 @@ return "ok"
                             m.final_response_text = repair_text[:2000]
 
                 if run.compile_once_repair and not m.error:
+                    repair_prompt = ev.prompt_text
+                    if run.repair_contract:
+                        repair_prompt += (
+                            "\\n\\n## Explicit repair contract\\n"
+                            "Required named structure: Foundation, TowerShaft, Door, LookoutPlatform, and battlements. "
+                            "Preserve valid existing geometry and do not add optional windows or unrelated decorative parts. "
+                            "Center the platform on the shaft, seat battlements on the platform, and visibly attach any "
+                            "flag to its pole. Correct or remove only clearly disconnected pieces."
+                        )
                     repair_messages = [
                         {
                             "role": "system",
@@ -1700,7 +1720,7 @@ return "ok"
                                 "valid geometry and never replay the original build. Stop after that one correction script."
                             ),
                         },
-                        {"role": "user", "content": ev.prompt_text},
+                        {"role": "user", "content": repair_prompt},
                     ]
                     repair_text, repair_rounds = await run_fresh_agent_loop(
                         model,
@@ -2333,6 +2353,7 @@ def parse_args():
     p.add_argument("--auto-spatial-feedback", action="store_true", help="Inject compact post-edit spatial diffs after model execute_luau calls without exposing new tools")
     p.add_argument("--actor-verifier", action="store_true", help="Run a fresh read-only verifier and one bounded repair pass after the actor")
     p.add_argument("--compile-once-repair", action="store_true", help="Run one script-first edit and one bounded correction pass")
+    p.add_argument("--repair-contract", action="store_true", help="Inject a compact named repair contract into the task prompt")
     p.add_argument("--existing-scene", action="store_true", help="Tell the model the eval setup provides an existing scene to inspect or repair")
     p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
     p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
@@ -2444,6 +2465,7 @@ async def main():
         auto_spatial_feedback=args.auto_spatial_feedback,
         actor_verifier=args.actor_verifier,
         compile_once_repair=args.compile_once_repair,
+        repair_contract=args.repair_contract,
         existing_scene=args.existing_scene,
     )
 
@@ -2521,6 +2543,8 @@ async def main():
         mode += "_fixer"
     if args.existing_scene:
         mode += "_repair"
+    if args.repair_contract:
+        mode += "_contract"
     run_id = f"{mode}_{datetime.now().strftime('%m%d_%H%M')}"
     run_dir = f"{args.output_dir}/{run_id}"
     Path(run_dir).mkdir(parents=True, exist_ok=True)
@@ -2544,6 +2568,7 @@ async def main():
         "auto_spatial_feedback": args.auto_spatial_feedback,
         "actor_verifier": args.actor_verifier,
         "compile_once_repair": args.compile_once_repair,
+        "repair_contract": args.repair_contract,
         "existing_scene": args.existing_scene,
         "solver": solver_enabled,
         "fixer": args.fixer,
@@ -2597,6 +2622,8 @@ async def main():
         manifest["skills_mode"] = "actor_verifier"
     elif args.compile_once_repair:
         manifest["skills_mode"] = "compile_once"
+    elif args.repair_contract:
+        manifest["skills_mode"] = "repair_contract"
     else:
         manifest["skills_mode"] = "vanilla"
     if judge_enabled:

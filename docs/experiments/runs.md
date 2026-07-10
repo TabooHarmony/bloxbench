@@ -36,6 +36,7 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `vanilla_repair_0710_0858`: matched two-defect control; artifacts: `results_pull/vanilla_repair_0710_0858/`; same final structure as actor/verifier at lower cost, flag remained physically detached
 - `compile_once_repair_0710_1012`: script-first existing-scene watchtower repair; artifacts: `results_pull/compile_once_repair_0710_1012/`; 1 edit, 121,788 input tokens, visually coherent but flag remained floating; retained as execution-control evidence
 - `vanilla_repair_0710_1016`: current same-cap vanilla watchtower control; artifacts: `results_pull/vanilla_repair_0710_1016/`; 4 edits, 192,700 input tokens, visually comparable but structurally noisier
+- `compile_once_repair_contract_0710_1126`: named repair-contract condition; artifacts: `results_pull/compile_once_repair_contract_0710_1126/`; 1 edit, 132,700 input tokens, fewer overlaps and less optional detail, but flag attachment still failed; no quality promotion
 - `vanilla_repair_0709_2228`: one cheap `cline-pass/minimax-m3` model comparison; artifacts: `results_pull/vanilla_repair_0709_2228/`; model inspected but made zero edits, so no quality comparison was possible
 
 ## required entry format

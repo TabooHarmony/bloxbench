@@ -57,6 +57,8 @@ The model-side decomposition protocol was tested and rejected. The repair-first 
 
 The retained compile-once execution mode changes loop shape without adding geometry APIs: one complete raw Luau edit followed by one bounded correction pass. It reduced token and edit churn against the current vanilla watchtower control, but visual review did not establish a quality win. Use it as a controlled baseline for future task-representation or model/data experiments, not as a scene-understanding intervention.
 
+A named repair contract reduced optional geometry and overlap counts in one follow-up, but the model still violated an explicit flag-attachment constraint. Do not continue prompt-tuning this fixture; treat the contract result as evidence for model/data work.
+
 `legacy/SpatialHelpers.lua` and `legacy/StructuralFixer.lua` are preserved for historical reproduction only. Their launchers are under `legacy/experiments/`. They are not the next research arm.
 
 The old spatial solver is external to this repository and is only used when an explicit solver path is supplied.

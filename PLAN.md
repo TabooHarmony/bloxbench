@@ -23,6 +23,7 @@ Close the rejected construction interventions, then use repair-first spatial exp
 - the corrected focused actor/verifier roof repair beat its vanilla control, but the verifier exhausted its read-only rounds without producing a report
 - the matched two-defect follow-up produced the same physically incomplete artifact as vanilla at substantially higher cost; Spatial is not promoted
 - compile-once/repair matched the current vanilla control with fewer tokens and edits, but did not clearly improve final visual quality
+- the named repair contract reduced optional geometry and overlaps, but still missed the explicit flag attachment; prompt tuning this fixture is stopped
 
 ## next sequence
 

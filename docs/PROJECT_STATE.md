@@ -27,6 +27,7 @@ The operator script remains under `scripts/windev/` for historical reproduction 
 - the one cheap alternate model comparison did not enter edit mode, so it is not evidence of model quality
 - the repair-first spatial observability prototype is retained as a tool-research direction, not an approved benchmark arm
 - compile-once/repair reduced tokens and edit churn against a current vanilla control, but did not clearly improve the final screenshot
+- the named repair contract reduced optional detail and overlaps, but missed the explicit flag-attachment constraint; stop prompt-tuning this fixture
 
 ## current code state
 
