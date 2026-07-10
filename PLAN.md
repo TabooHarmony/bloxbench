@@ -4,7 +4,7 @@ This file contains only active work. The historical 23-question design record is
 
 ## goal
 
-Close the rejected construction interventions, then use repair-first spatial experiments to discover tools that improve a baseline model's scene understanding without hiding geometry creation behind a builder API.
+Establish whether BloxBench should remain a construction research microscope, become a stable capability benchmark, or split toward an asset-first product workflow. Intervention research is paused until a fresh strategic review decides which layer is actually worth improving.
 
 ## current status
 
@@ -24,6 +24,7 @@ Close the rejected construction interventions, then use repair-first spatial exp
 - the matched two-defect follow-up produced the same physically incomplete artifact as vanilla at substantially higher cost; Spatial is not promoted
 - compile-once/repair matched the current vanilla control with fewer tokens and edits, but did not clearly improve final visual quality
 - the named repair contract reduced optional geometry and overlaps, but still missed the explicit flag attachment; prompt tuning this fixture is stopped
+- the repository is at a strategic handoff boundary; do not start another model run or intervention until the handoff review is complete
 
 ## next sequence
 
@@ -32,7 +33,8 @@ Close the rejected construction interventions, then use repair-first spatial exp
 3. record the matched protocol run and its failed replicate
 4. preserve the spatial observability repair prototype and its matched evidence
 5. retain compile-once/repair as a bounded execution mode, not a quality intervention
-6. next test task representation or model/data improvements, not another verifier, linter, or feedback variant
+6. stop all new runs and send `docs/HANDOFF_2026-07-10.md` to a fresh larger-context reviewer
+7. accept a new experiment only after the reviewer chooses benchmark stabilization, model/data, or asset-first product work
 
 ## active constraints
 

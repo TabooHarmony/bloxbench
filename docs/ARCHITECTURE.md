@@ -59,6 +59,8 @@ The retained compile-once execution mode changes loop shape without adding geome
 
 A named repair contract reduced optional geometry and overlap counts in one follow-up, but the model still violated an explicit flag-attachment constraint. Do not continue prompt-tuning this fixture; treat the contract result as evidence for model/data work.
 
+The repository is now at a strategic handoff boundary. No new intervention or model run should start until a fresh larger-context review decides whether the next layer is benchmark stabilization, model/data, or an asset-first product workflow.
+
 `legacy/SpatialHelpers.lua` and `legacy/StructuralFixer.lua` are preserved for historical reproduction only. Their launchers are under `legacy/experiments/`. They are not the next research arm.
 
 The old spatial solver is external to this repository and is only used when an explicit solver path is supplied.
