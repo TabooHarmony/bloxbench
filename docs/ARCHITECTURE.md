@@ -14,9 +14,10 @@ Roblox Studio starts from an empty baseplate
     v
 model receives the construction prompt and uses Studio MCP tools
     |
+    +--> optional model-side protocol injection
     +--> optional skill injection
     +--> optional legacy helpers/fixer
-    +--> active PartPrimitives module
+    +--> rejected PartPrimitives module (historical only)
     |
     v
 check_scene gate, unless --no-gate is selected
@@ -37,7 +38,7 @@ The meaningful comparison unit is a complete run configuration, not just a score
 
 - model and API endpoint identity
 - eval set and filter
-- vanilla, primitives, skills, helpers, fixer, or solver mode
+- vanilla, protocol, primitives, skills, helpers, fixer, or solver mode
 - temperature
 - maximum tool rounds
 - token cap
@@ -49,7 +50,9 @@ The harness writes these values into the run manifest and results metadata.
 
 ## active versus legacy code
 
-`PartPrimitives.lua` is active. It is uploaded into `ReplicatedStorage` in primitives mode and exposed to the model as `P.*` functions.
+`PartPrimitives.lua` is preserved for historical reproduction only. It is not an active research arm.
+
+The model-side decomposition protocol was tested and rejected. It reduced token cost and geometry, but the clean replicate produced an incomplete, miscomposed watchtower with giant floating cylinders. No construction intervention is active now. The benchmark is paused pending a more specific decomposition hypothesis.
 
 `legacy/SpatialHelpers.lua` and `legacy/StructuralFixer.lua` are preserved for historical reproduction only. Their launchers are under `legacy/experiments/`. They are not the next research arm.
 

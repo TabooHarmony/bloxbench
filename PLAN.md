@@ -20,9 +20,9 @@ Close the PartPrimitives experiment with an evidence-backed verdict, then choose
 
 1. preserve and index the dragon diagnostic and follow-up artifacts
 2. record the matched vanilla control, cottage replicate, and failed architecture smoke
-3. mark `PartPrimitives` as a rejected benchmark intervention
-4. do not run the full 10-building primitive experiment or more primitive smoke tests
-5. choose a decomposition/model intervention or pause the construction benchmark
+3. record the matched protocol run and its failed replicate
+4. reject the decomposition protocol as a benchmark intervention
+5. pause the construction benchmark until a more specific falsifiable intervention is designed
 
 ## active constraints
 

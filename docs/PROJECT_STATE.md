@@ -4,7 +4,7 @@
 
 This is a private, experimental operator branch of BloxBench. Upstream is parked. The repository is optimized for one operator running controlled Roblox Studio experiments, not for public onboarding.
 
-No active construction intervention is approved. `PartPrimitives.lua` is preserved as a rejected experiment. The matched cottage replicate was a useful but expensive positive signal; the follow-up architecture smoke failed to generalize. Further work should target decomposition/model behavior directly, or pause the construction benchmark.
+No active construction intervention is approved. `PartPrimitives.lua` and the decomposition protocol are preserved as rejected experiments. The benchmark is paused pending a more specific, falsifiable intervention.
 
 The last attempted architecture smoke used:
 
@@ -69,4 +69,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-Do not start the full ten-building experiment with `PartPrimitives`, and do not run more primitive smoke tests. Preserve the negative result and pivot to a different decomposition/model intervention, or pause the construction benchmark.
+The next useful work is not another broad construction run. Pause the benchmark, or design a more specific decomposition intervention with an explicit failure criterion. Do not promote the protocol based on lower counts or one promising run.

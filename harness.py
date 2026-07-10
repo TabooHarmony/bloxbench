@@ -105,6 +105,7 @@ class RunConfig:
     fixer_code: Optional[str] = None  # StructuralFixer.lua source
     helpers_code: Optional[str] = None  # SpatialHelpers.lua source (helpers mode)
     primitives_code: Optional[str] = None  # PartPrimitives.lua source (primitives mode)
+    protocol_text: Optional[str] = None  # model-side decomposition protocol
 
 
 # �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
@@ -1272,6 +1273,8 @@ return "ok"
                         "P.stack for towers/buildings. Use P.block/cyl/ball/wedge for simple parts. "
                         "Chain primitives by passing the return value as `on=` to the next."
                     )
+                if run.protocol_text:
+                    LUAU_SYSTEM_PROMPT += "\\n\\n## Model-side construction protocol\\n\\n" + run.protocol_text
                 messages.append({"role": "system", "content": LUAU_SYSTEM_PROMPT})
                 messages.append({"role": "user", "content": ev.prompt_text})
 
@@ -2040,6 +2043,7 @@ def parse_args():
     p.add_argument("--helpers-path", default=None, help="Path to SpatialHelpers.lua (default: ./legacy/SpatialHelpers.lua)")
     p.add_argument("--primitives", action="store_true", help="Upload PartPrimitives.lua to ReplicatedStorage + inject composition API into system prompt. Model calls P.wall/P.roof/P.limb/P.stack for connected structures.")
     p.add_argument("--primitives-path", default=None, help="Path to PartPrimitives.lua (default: ./PartPrimitives.lua)")
+    p.add_argument("--protocol-path", default=None, help="Inject a model-side construction protocol into the system prompt")
     p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
     p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
     return p.parse_args()
@@ -2175,6 +2179,15 @@ async def main():
         run.primitives_code = primitives_path.read_text(encoding="utf-8")
         logger.info(f"PartPrimitives enabled: {len(run.primitives_code)} chars from {primitives_path}")
 
+    # Model-side construction protocol: no helper or geometry API is injected.
+    if args.protocol_path:
+        protocol_path = Path(args.protocol_path)
+        if not protocol_path.exists():
+            print(f"Error: construction protocol not found at {protocol_path}")
+            sys.exit(1)
+        run.protocol_text = protocol_path.read_text(encoding="utf-8")
+        logger.info(f"Construction protocol enabled: {len(run.protocol_text)} chars from {protocol_path}")
+
     # Solver mode: load SpatialSolver.lua + build spec vocabulary prompt
     solver_code = None
     solver_enabled = args.solver
@@ -2197,6 +2210,8 @@ async def main():
         mode = "helpers"
     elif args.primitives:
         mode = "primitives"
+    elif args.protocol_path:
+        mode = "protocol"
     else:
         mode = "vanilla"
     if args.fixer:
@@ -2218,6 +2233,8 @@ async def main():
         "no_gate": run.no_gate,
         "helpers": args.helpers,
         "primitives": args.primitives,
+        "protocol": bool(args.protocol_path),
+        "protocol_path": str(Path(args.protocol_path).resolve()) if args.protocol_path else None,
         "solver": solver_enabled,
         "fixer": args.fixer,
         "eval_filter": args.eval_filter,
@@ -2260,6 +2277,8 @@ async def main():
         manifest["skills_mode"] = "helpers"
     elif args.primitives:
         manifest["skills_mode"] = "primitives"
+    elif args.protocol_path:
+        manifest["skills_mode"] = "protocol"
     else:
         manifest["skills_mode"] = "vanilla"
     if judge_enabled:

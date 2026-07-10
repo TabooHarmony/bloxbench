@@ -31,7 +31,8 @@ harness.py              benchmark runner and Studio orchestration
 judge.py                OpenAI-compatible visual judge integration
 generate_report.py      text reports for completed runs
 gen_results_html.py     local HTML comparison viewer
-PartPrimitives.lua      active primitive composition module
+PartPrimitives.lua      rejected primitive composition module, retained for reproduction
+protocols/              model-side intervention prompts
 Evals/                  UI and building prompts/checks
 Reference/              hand-built calibration solutions
 Places/                 base places used by evals
@@ -52,20 +53,17 @@ cp .env.example .env
 python3 harness.py --help
 ```
 
-For the active two-eval primitive smoke run on the Windows host, use:
+The current construction benchmark is paused. The plain-text decomposition protocol was tested on matched cottage and watchtower runs, looked promising once, then failed cleanly on replication. Do not promote it from lower token or part counts.
 
-```text
-scripts/windev/smoke_test.bat
-```
-
-The script targets cozy cottage and dragon statue. Cottage exercises walls, windows, and roofs. Dragon exercises limb chains. It uses `--no-gate`, so inspect screenshots and structural flags manually.
+The historical protocol runners remain under `scripts/windev/` for reproduction only.
 
 For a direct harness invocation, supply the Studio executable, MCP launcher, model, and any judge settings explicitly. Never commit those values.
 
 ## modes
 
-- vanilla: no helper or primitive injection
-- primitives: uploads `PartPrimitives.lua` and exposes the `P.*` composition API
+- vanilla: no helper, primitive, or protocol injection
+- protocol: historical model-side decomposition experiment, rejected after replication
+- primitives: historical `PartPrimitives.lua` experiment, not an active arm
 - helpers: legacy experiment using `legacy/SpatialHelpers.lua`
 - fixer: legacy post-processing experiment using `legacy/StructuralFixer.lua`
 - solver: external legacy solver path, if explicitly configured

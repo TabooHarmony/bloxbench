@@ -20,6 +20,9 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `primitives_0709_1648`: matched primitive cottage replicate; artifacts: `results_pull/primitives_0709_1648/`; 71 parts, 4 floating, 53 overlaps, zero model tool errors, visibly better but higher token cost
 - `primitives_0709_1621`: final clean-model-error dragon follow-up; artifacts: `results_pull/primitives_0709_1621/`; zero model tool errors, zero duplicate primitive names, 14 generic floating flags, 77 overlaps, visually unacceptable dragon
 - `primitives_0709_1653`: failed three-eval architecture smoke; artifacts: `results_pull/primitives_0709_1653/`; cottage hit the token budget at 8 parts, watchtower and market stall were visually unreadable, all `passed_cons=false`, intervention rejected
+- `protocol_0709_1730`: first matched model-side decomposition protocol run; artifacts: `results_pull/protocol_0709_1730/`; 0 model tool errors, lower cost and geometry, visually promising but not promoted
+- `vanilla_0709_1737`: matched vanilla replicate; artifacts: `results_pull/vanilla_0709_1737/`; cottage hit token budget, watchtower visually recognizable but structurally noisy
+- `protocol_0709_1747`: failed clean protocol replicate; artifacts: `results_pull/protocol_0709_1747/`; 0 model tool errors but watchtower was giant floating cylinders and not a valid construction, protocol rejected
 
 ## required entry format
 
