@@ -23,6 +23,8 @@ The operator script remains under `scripts/windev/` for historical reproduction 
 - historical artifacts stay local and out of git
 - legacy source remains available, but is separated under `legacy/`
 - generic connected-component linting is not sufficient to guarantee visually convincing attachments
+- automatic post-edit feedback is retained as an experimental harness feature but is not a quality intervention
+- the one cheap alternate model comparison did not enter edit mode, so it is not evidence of model quality
 - the repair-first spatial observability prototype is retained as a tool-research direction, not an approved benchmark arm
 
 ## current code state
@@ -73,4 +75,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-The spatial observability prototype is retained as historical positive evidence, but the relation-oracle follow-up was negative. Stop this repair-tool branch. Do not run more variants until there is a materially different hypothesis with a cheaper adoption path and an explicit visual success criterion.
+The spatial observability prototype is retained as historical positive evidence, but relation checking and automatic post-edit feedback did not produce a visual win. The cheap alternate model comparison did not edit. Stop this construction-tool branch. Do not run more variants until there is a materially different hypothesis with a cheaper adoption path and an explicit visual success criterion.

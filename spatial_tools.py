@@ -22,6 +22,75 @@ class SpatialTooling:
     def __init__(self, call_tool: ToolCaller):
         self._call_tool = call_tool
         self.intents: list[dict] = []
+        self._auto_previous_snapshot: dict | None = None
+
+    async def prime_auto_feedback(self, root: str = "Workspace") -> str:
+        """Capture the post-setup baseline for automatic edit feedback."""
+        snapshot_text = await self._snapshot({"root": root, "max_parts": 80})
+        if snapshot_text.startswith("Tool error:"):
+            return snapshot_text
+        try:
+            self._auto_previous_snapshot = json.loads(snapshot_text)
+        except json.JSONDecodeError:
+            return "Tool error: automatic spatial feedback received an invalid baseline snapshot"
+        return "baseline captured"
+
+    async def observe_after_edit(self, *, edit_error: bool, edit_result: str) -> str:
+        """Return a compact state diff after a model edit, without model adoption."""
+        snapshot_text = await self._snapshot({"root": "Workspace", "max_parts": 80})
+        if snapshot_text.startswith("Tool error:"):
+            return snapshot_text
+        try:
+            current = json.loads(snapshot_text)
+        except json.JSONDecodeError:
+            return "Tool error: automatic spatial feedback received an invalid post-edit snapshot"
+
+        previous = self._auto_previous_snapshot or {"parts": [], "components": []}
+        self._auto_previous_snapshot = current
+        old_parts = {str(part.get("path")): part for part in previous.get("parts", [])}
+        new_parts = {str(part.get("path")): part for part in current.get("parts", [])}
+        added = sorted(path for path in new_parts if path not in old_parts)
+        removed = sorted(path for path in old_parts if path not in new_parts)
+        changed = []
+        for path in sorted(set(old_parts) & set(new_parts)):
+            old = old_parts[path]
+            new = new_parts[path]
+            old_pos = old.get("position", {})
+            new_pos = new.get("position", {})
+            old_size = old.get("size", {})
+            new_size = new.get("size", {})
+            position_delta = {
+                axis: round(float(new_pos.get(axis, 0.0)) - float(old_pos.get(axis, 0.0)), 3)
+                for axis in ("x", "y", "z")
+            }
+            size_delta = {
+                axis: round(float(new_size.get(axis, 0.0)) - float(old_size.get(axis, 0.0)), 3)
+                for axis in ("x", "y", "z")
+            }
+            if any(abs(value) > 0.01 for value in position_delta.values()) or any(abs(value) > 0.01 for value in size_delta.values()):
+                changed.append({"path": path, "position_delta": position_delta, "size_delta": size_delta})
+
+        components = list(current.get("components", []))
+        components.sort(key=lambda component: int(component.get("count", 0)), reverse=True)
+        grounded = next((component for component in components if component.get("grounded")), None)
+        disconnected = [
+            {"count": component.get("count", 0), "names": component.get("names", [])}
+            for component in components
+            if grounded is not None and component.get("id") != grounded.get("id")
+        ]
+        feedback = {
+            "status": "edit_error" if edit_error else "ok",
+            "changed": changed[:12],
+            "added": added[:12],
+            "removed": removed[:12],
+            "part_count": len(current.get("parts", [])),
+            "component_count": len(components),
+            "disconnected": disconnected[:4],
+        }
+        if edit_error:
+            feedback["warning"] = "execute_luau reported an error; the edit may have partially applied. Inspect this diff before retrying."
+            feedback["edit_result"] = str(edit_result)[:240]
+        return json.dumps(feedback, separators=(",", ":"))
 
     @classmethod
     def handles(cls, name: str) -> bool:

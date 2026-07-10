@@ -108,6 +108,7 @@ class RunConfig:
     primitives_code: Optional[str] = None  # PartPrimitives.lua source (primitives mode)
     protocol_text: Optional[str] = None  # model-side decomposition protocol
     spatial_tools: bool = False  # local observation and intent tools
+    auto_spatial_feedback: bool = False  # harness-injected post-edit state diff
     existing_scene: bool = False  # eval setup provides a scene to inspect or repair
 
 
@@ -1020,12 +1021,15 @@ async def _run_single_eval_inner(
                     openai_tools.append(SkillLoader.tool_definition())
                     logger.info(f"[{ev.scenario_name}] skill_view tool appended ({len(run.skill_loader.skills)} skills available)")
                 spatial_tooling = None
-                if run.spatial_tools:
+                if run.spatial_tools or run.auto_spatial_feedback:
                     spatial_tooling = SpatialTooling(
                         lambda tool_name, tool_args: harness_call_tool(session, tool_name, tool_args, m)
                     )
-                    openai_tools.extend(SpatialTooling.tool_definitions())
-                    logger.info(f"[{ev.scenario_name}] local spatial tools appended")
+                    if run.spatial_tools:
+                        openai_tools.extend(SpatialTooling.tool_definitions())
+                        logger.info(f"[{ev.scenario_name}] local spatial tools appended")
+                    if run.auto_spatial_feedback:
+                        logger.info(f"[{ev.scenario_name}] automatic spatial feedback enabled")
                 logger.info(f"[{ev.scenario_name}] {len(openai_tools)} tools available")
 
                 # Studio readiness probe: wait until execute_luau actually works
@@ -1146,6 +1150,12 @@ return "ok"
                     return m
 
                 m.time_breakdown["setup_ms"] = int((time.time() - t0) * 1000)
+                if run.auto_spatial_feedback and spatial_tooling:
+                    baseline_status = await spatial_tooling.prime_auto_feedback()
+                    if baseline_status.startswith("Tool error:"):
+                        logger.warning(f"[{ev.scenario_name}] automatic spatial baseline failed: {baseline_status[:200]}")
+                    else:
+                        logger.info(f"[{ev.scenario_name}] automatic spatial baseline captured")
                 # 6. Build messages for LLM
                 messages = []
                 # Skills mode: use skill index as system prompt
@@ -1300,6 +1310,11 @@ return "ok"
                         "Use spatial_lint before claiming completion. "
                         "Use these tools to understand and verify the scene, but create and repair parts with raw execute_luau."
                     )
+                if run.auto_spatial_feedback:
+                    LUAU_SYSTEM_PROMPT += (
+                        "\\n\\nThe harness automatically appends a compact AUTO_SPATIAL_FEEDBACK diff after each execute_luau edit. "
+                        "Treat it as the current scene state, especially changed parts, disconnected components, and partial-apply warnings."
+                    )
                 if run.protocol_text:
                     LUAU_SYSTEM_PROMPT += "\\n\\n## Model-side construction protocol\\n\\n" + run.protocol_text
                 messages.append({"role": "system", "content": LUAU_SYSTEM_PROMPT})
@@ -1364,6 +1379,7 @@ return "ok"
                                 m.tools_used.append(tool_name)
                             m.tool_call_sequence.append(tool_name)
                             # Count edit operations
+                            is_execute_edit = False
                             if tool_name == "multi_edit":
                                 m.edit_count += 1
                             try:
@@ -1396,13 +1412,18 @@ return "ok"
                             if tool_name == "execute_luau":
                                 code = args.get("code", "")
                                 edit_markers = (
-                                    "Instance.new", ".Source", "multi_edit",
+                                    "Instance.new", ".Source =", "multi_edit",
+                                    ".Position =", ".CFrame =", ".Size =", ".Parent =",
+                                    ":Destroy()", ":Clone()", "SetAttribute(",
                                     "H.block", "H.cyl", "H.ball", "H.wedge",
                                     "P.block", "P.cyl", "P.ball", "P.wedge",
                                     "P.wall", "P.roof", "P.limb", "P.stack", "P.floor",
                                 )
                                 if any(marker in code for marker in edit_markers):
                                     m.edit_count += 1
+                                    is_execute_edit = True
+                            tool_out = ""
+                            tool_is_err = False
                             # Handle local spatial tools without sending them to MCP.
                             if spatial_tooling and spatial_tooling.handles(tool_name):
                                 tool_out = await spatial_tooling.handle(tool_name, args)
@@ -1448,6 +1469,16 @@ return "ok"
                                         tool_out = f"Tool error: {e2}"
                                         m.tool_errors += 1
                                         logger.warning(f"[{ev.scenario_name}] tool {func['name']} retry fail: {str(e2)[:200]}")
+
+                            if run.auto_spatial_feedback and spatial_tooling and tool_name == "execute_luau" and is_execute_edit:
+                                auto_feedback = await spatial_tooling.observe_after_edit(
+                                    edit_error=tool_is_err,
+                                    edit_result=tool_out,
+                                )
+                                if not auto_feedback.startswith("Tool error:"):
+                                    tool_out += "\\nAUTO_SPATIAL_FEEDBACK\\n" + auto_feedback
+                                else:
+                                    logger.warning(f"[{ev.scenario_name}] automatic spatial feedback failed: {auto_feedback[:200]}")
 
                             # Truncate tool results to prevent context bloat
                             if len(tool_out) > 4000:
@@ -2079,6 +2110,7 @@ def parse_args():
     p.add_argument("--primitives-path", default=None, help="Path to PartPrimitives.lua (default: ./PartPrimitives.lua)")
     p.add_argument("--protocol-path", default=None, help="Inject a model-side construction protocol into the system prompt")
     p.add_argument("--spatial-tools", action="store_true", help="Expose local spatial_snapshot and spatial intent tools without adding a builder API")
+    p.add_argument("--auto-spatial-feedback", action="store_true", help="Inject compact post-edit spatial diffs after model execute_luau calls without exposing new tools")
     p.add_argument("--existing-scene", action="store_true", help="Tell the model the eval setup provides an existing scene to inspect or repair")
     p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
     p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
@@ -2187,6 +2219,7 @@ async def main():
         no_gate=args.no_gate,
         fixer=args.fixer,
         spatial_tools=args.spatial_tools,
+        auto_spatial_feedback=args.auto_spatial_feedback,
         existing_scene=args.existing_scene,
     )
 
@@ -2252,6 +2285,8 @@ async def main():
         mode = "protocol"
     elif args.spatial_tools:
         mode = "spatial"
+    elif args.auto_spatial_feedback:
+        mode = "auto_feedback"
     else:
         mode = "vanilla"
     if args.fixer:
@@ -2278,6 +2313,7 @@ async def main():
         "protocol": bool(args.protocol_path),
         "protocol_path": str(Path(args.protocol_path).resolve()) if args.protocol_path else None,
         "spatial_tools": args.spatial_tools,
+        "auto_spatial_feedback": args.auto_spatial_feedback,
         "existing_scene": args.existing_scene,
         "solver": solver_enabled,
         "fixer": args.fixer,
@@ -2325,6 +2361,8 @@ async def main():
         manifest["skills_mode"] = "protocol"
     elif args.spatial_tools:
         manifest["skills_mode"] = "spatial"
+    elif args.auto_spatial_feedback:
+        manifest["skills_mode"] = "auto_feedback"
     else:
         manifest["skills_mode"] = "vanilla"
     if judge_enabled:

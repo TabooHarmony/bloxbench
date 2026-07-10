@@ -18,6 +18,8 @@ Close the rejected construction interventions, then use repair-first spatial exp
 - the spatial observability prototype improved the main repair assembly, but generic component linting did not guarantee visually valid attachments
 - the strict-tolerance lint variant increased churn and exceeded the token cap
 - the targeted relation-oracle follow-up was not adopted, exceeded the token cap, and regressed visually
+- automatic post-edit feedback reduced rounds and tokens but produced a visually worse early stop
+- the cheap MiniMax M3 comparison inspected the scene but made zero edits
 
 ## next sequence
 

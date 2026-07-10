@@ -29,6 +29,8 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `spatial_repair_0709_2117`: corrected component-lint repair; artifacts: `results_pull/spatial_repair_0709_2117/`; best within-budget spatial result, retained as prototype evidence
 - `spatial_repair_0709_2122`: strict-contact linter follow-up; artifacts: `results_pull/spatial_repair_0709_2122/`; token cap exceeded and generic tolerance iteration rejected
 - `spatial_repair_0709_2144`: targeted relation-check follow-up; artifacts: `results_pull/spatial_repair_0709_2144/`; relation tool was not adopted, token cap exceeded, and visual result regressed
+- `auto_feedback_repair_0709_2216`: harness-injected post-edit feedback; artifacts: `results_pull/auto_feedback_repair_0709_2216/`; efficient but visually regressed after one bad edit
+- `vanilla_repair_0709_2228`: one cheap `cline-pass/minimax-m3` model comparison; artifacts: `results_pull/vanilla_repair_0709_2228/`; model inspected but made zero edits, so no quality comparison was possible
 
 ## required entry format
 

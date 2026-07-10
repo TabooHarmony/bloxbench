@@ -76,3 +76,17 @@ A targeted `spatial_relation_check` follow-up was tested as `spatial_repair_0709
 - the final screenshot regressed to an incomplete tower with 3 floating parts and 12 overlaps
 
 This follow-up is negative evidence. Do not retain the relation tool in the active harness or continue iterating on this repair branch without a materially different hypothesis.
+
+## automatic feedback follow-up
+
+`auto_feedback_repair_0709_2216` moved observation into the harness. No new spatial tools were exposed to the model; the harness appended a compact diff after edit-like `execute_luau` calls.
+
+Operationally:
+
+- 7 rounds
+- 128,612 input tokens
+- 1 edit
+- 0 model tool errors
+- no token-cap failure
+
+Visually it was a failure. The model stopped after a bad edit that moved `LooseRoof` into the doorway area, removed the coherent lookout assembly, and left the flag floating. Efficiency without visual correctness is not a win, so this path is retained only as an experimental harness feature and not promoted.
