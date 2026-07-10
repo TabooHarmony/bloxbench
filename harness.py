@@ -44,6 +44,7 @@ from mcp.client.stdio import stdio_client
 from mcp import ClientSession
 import aiohttp
 from dotenv import load_dotenv
+from spatial_tools import SpatialTooling
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -106,6 +107,8 @@ class RunConfig:
     helpers_code: Optional[str] = None  # SpatialHelpers.lua source (helpers mode)
     primitives_code: Optional[str] = None  # PartPrimitives.lua source (primitives mode)
     protocol_text: Optional[str] = None  # model-side decomposition protocol
+    spatial_tools: bool = False  # local observation and intent tools
+    existing_scene: bool = False  # eval setup provides a scene to inspect or repair
 
 
 # �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
@@ -1016,6 +1019,13 @@ async def _run_single_eval_inner(
                 if run.skill_loader:
                     openai_tools.append(SkillLoader.tool_definition())
                     logger.info(f"[{ev.scenario_name}] skill_view tool appended ({len(run.skill_loader.skills)} skills available)")
+                spatial_tooling = None
+                if run.spatial_tools:
+                    spatial_tooling = SpatialTooling(
+                        lambda tool_name, tool_args: harness_call_tool(session, tool_name, tool_args, m)
+                    )
+                    openai_tools.extend(SpatialTooling.tool_definitions())
+                    logger.info(f"[{ev.scenario_name}] local spatial tools appended")
                 logger.info(f"[{ev.scenario_name}] {len(openai_tools)} tools available")
 
                 # Studio readiness probe: wait until execute_luau actually works
@@ -1273,6 +1283,23 @@ return "ok"
                         "P.stack for towers/buildings. Use P.block/cyl/ball/wedge for simple parts. "
                         "Chain primitives by passing the return value as `on=` to the next."
                     )
+                if run.existing_scene:
+                    LUAU_SYSTEM_PROMPT = LUAU_SYSTEM_PROMPT.replace(
+                        "on an empty baseplate", "on an existing Roblox scene that may need inspection or repair"
+                    ).replace(
+                        "The workspace contains only a Baseplate.",
+                        "The workspace contains an existing scene provided by the eval. Inspect before changing it.",
+                    )
+                if run.spatial_tools:
+                    LUAU_SYSTEM_PROMPT += (
+                        "\\n\\n## Spatial observation tools\\n"
+                        "spatial_snapshot inspects the live scene without changing it. "
+                        "spatial_intent_add records expected components without creating geometry. "
+                        "spatial_intent_check compares those expectations with the live scene. "
+                        "spatial_lint checks every actual part for disconnected or ungrounded components. "
+                        "Use spatial_lint before claiming completion. "
+                        "Use these tools to understand and verify the scene, but create and repair parts with raw execute_luau."
+                    )
                 if run.protocol_text:
                     LUAU_SYSTEM_PROMPT += "\\n\\n## Model-side construction protocol\\n\\n" + run.protocol_text
                 messages.append({"role": "system", "content": LUAU_SYSTEM_PROMPT})
@@ -1376,8 +1403,15 @@ return "ok"
                                 )
                                 if any(marker in code for marker in edit_markers):
                                     m.edit_count += 1
+                            # Handle local spatial tools without sending them to MCP.
+                            if spatial_tooling and spatial_tooling.handles(tool_name):
+                                tool_out = await spatial_tooling.handle(tool_name, args)
+                                tool_is_err = tool_out.startswith("Tool error:")
+                                track_tool_error(m, tool_name, tool_is_err)
+                                if tool_is_err:
+                                    logger.warning(f"[{ev.scenario_name}] local tool {tool_name} returned error: {tool_out[:200]}")
                             # Handle skill_view locally (not an MCP tool)
-                            if tool_name == "skill_view" and run.skill_loader:
+                            elif tool_name == "skill_view" and run.skill_loader:
                                 skill_name = args.get("name", "")
                                 tool_out = run.skill_loader.get_skill(skill_name)
                                 logger.info(f"[{ev.scenario_name}] skill_view({skill_name}) -> {len(tool_out)} chars")
@@ -2044,6 +2078,8 @@ def parse_args():
     p.add_argument("--primitives", action="store_true", help="Upload PartPrimitives.lua to ReplicatedStorage + inject composition API into system prompt. Model calls P.wall/P.roof/P.limb/P.stack for connected structures.")
     p.add_argument("--primitives-path", default=None, help="Path to PartPrimitives.lua (default: ./PartPrimitives.lua)")
     p.add_argument("--protocol-path", default=None, help="Inject a model-side construction protocol into the system prompt")
+    p.add_argument("--spatial-tools", action="store_true", help="Expose local spatial_snapshot and spatial intent tools without adding a builder API")
+    p.add_argument("--existing-scene", action="store_true", help="Tell the model the eval setup provides an existing scene to inspect or repair")
     p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
     p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
     return p.parse_args()
@@ -2150,6 +2186,8 @@ async def main():
         max_tokens_per_eval=args.max_tokens_per_eval,
         no_gate=args.no_gate,
         fixer=args.fixer,
+        spatial_tools=args.spatial_tools,
+        existing_scene=args.existing_scene,
     )
 
     # Fixer mode: load StructuralFixer.lua
@@ -2212,10 +2250,14 @@ async def main():
         mode = "primitives"
     elif args.protocol_path:
         mode = "protocol"
+    elif args.spatial_tools:
+        mode = "spatial"
     else:
         mode = "vanilla"
     if args.fixer:
         mode += "_fixer"
+    if args.existing_scene:
+        mode += "_repair"
     run_id = f"{mode}_{datetime.now().strftime('%m%d_%H%M')}"
     run_dir = f"{args.output_dir}/{run_id}"
     Path(run_dir).mkdir(parents=True, exist_ok=True)
@@ -2235,6 +2277,8 @@ async def main():
         "primitives": args.primitives,
         "protocol": bool(args.protocol_path),
         "protocol_path": str(Path(args.protocol_path).resolve()) if args.protocol_path else None,
+        "spatial_tools": args.spatial_tools,
+        "existing_scene": args.existing_scene,
         "solver": solver_enabled,
         "fixer": args.fixer,
         "eval_filter": args.eval_filter,
@@ -2279,6 +2323,8 @@ async def main():
         manifest["skills_mode"] = "primitives"
     elif args.protocol_path:
         manifest["skills_mode"] = "protocol"
+    elif args.spatial_tools:
+        manifest["skills_mode"] = "spatial"
     else:
         manifest["skills_mode"] = "vanilla"
     if judge_enabled:

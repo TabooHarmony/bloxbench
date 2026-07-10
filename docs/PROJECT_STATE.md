@@ -4,7 +4,7 @@
 
 This is a private, experimental operator branch of BloxBench. Upstream is parked. The repository is optimized for one operator running controlled Roblox Studio experiments, not for public onboarding.
 
-No active construction intervention is approved. `PartPrimitives.lua` and the decomposition protocol are preserved as rejected experiments. The benchmark is paused pending a more specific, falsifiable intervention.
+No active construction benchmark arm is approved. `PartPrimitives.lua` and the decomposition protocol are preserved as rejected experiments. A repair-first spatial observability prototype produced a useful but incomplete signal and is retained for tool research, not as a promoted arm.
 
 The last attempted architecture smoke used:
 
@@ -22,6 +22,8 @@ The operator script remains under `scripts/windev/` for historical reproduction 
 - visual review outranks a completion percentage from a `--no-gate` run
 - historical artifacts stay local and out of git
 - legacy source remains available, but is separated under `legacy/`
+- generic connected-component linting is not sufficient to guarantee visually convincing attachments
+- the repair-first spatial observability prototype is retained as a tool-research direction, not an approved benchmark arm
 
 ## current code state
 
@@ -33,6 +35,7 @@ Recent primitive and harness patches have been applied. The important changes ar
 - `P.limb` accepts explicit origin-face anchors for top, bottom, left, right, front, and back attachments
 - structural flags appear before the capped structure listing
 - run manifests record the experiment configuration
+- `spatial_tools.py` provides the retained repair-first observation and intent prototype
 - primitive constructor calls count as edits
 
 Local syntax checks passed. The zero-token calibration verified exact primitive anchor joins. The clean dragon run had no model errors and no duplicate primitive names but remained visually unacceptable. A matched cottage control showed one promising primitive result, with fewer parts and overlaps and a clearer screenshot, but at substantially higher token cost. The follow-up three-eval architecture smoke then hit the token budget on cottage and produced unreadable watchtower and market stall results. `PartPrimitives` is rejected as a benchmark intervention.
@@ -41,7 +44,8 @@ Local syntax checks passed. The zero-token calibration verified exact primitive 
 
 - `harness.py`: orchestration, tool loop, gates, screenshots, structure dump, result persistence
 - `judge.py`: visual judge request and response parsing
-- `PartPrimitives.lua`: active primitive module
+- `PartPrimitives.lua`: rejected primitive module retained for reproduction
+- `spatial_tools.py`: repair-first observation and intent prototype
 - `Evals/UI/`: five UI evals
 - `Evals/Building/`: ten building evals
 - `Reference/`: hand-built judge and gate calibration places/scripts
@@ -69,4 +73,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-The next useful work is not another broad construction run. Pause the benchmark, or design a more specific decomposition intervention with an explicit failure criterion. Do not promote the protocol based on lower counts or one promising run.
+The next useful work is a design pass for a compact relation-level support oracle. Do not run more generic component-linter variants or broad construction experiments until the oracle has a falsifiable repair task and explicit contact semantics.

@@ -4,7 +4,7 @@ This file contains only active work. The historical 23-question design record is
 
 ## goal
 
-Close the PartPrimitives experiment with an evidence-backed verdict, then choose whether to test a decomposition/model intervention or pause Roblox construction work.
+Close the rejected construction interventions, then use repair-first spatial experiments to discover tools that improve a baseline model's scene understanding without hiding geometry creation behind a builder API.
 
 ## current status
 
@@ -15,14 +15,16 @@ Close the PartPrimitives experiment with an evidence-backed verdict, then choose
 - legacy helper and fixer files are separated under `legacy/`
 - post-patch local validation passed
 - dragon usage and anchor follow-up runs completed, but neither passed visual/structural review
+- the spatial observability prototype improved the main repair assembly, but generic component linting did not guarantee visually valid attachments
+- the strict-tolerance lint variant increased churn and exceeded the token cap
 
 ## next sequence
 
 1. preserve and index the dragon diagnostic and follow-up artifacts
 2. record the matched vanilla control, cottage replicate, and failed architecture smoke
 3. record the matched protocol run and its failed replicate
-4. reject the decomposition protocol as a benchmark intervention
-5. pause the construction benchmark until a more specific falsifiable intervention is designed
+4. preserve the spatial observability repair prototype and its matched evidence
+5. design, but do not yet implement, a relation-level support oracle
 
 ## active constraints
 

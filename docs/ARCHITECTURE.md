@@ -9,11 +9,12 @@ eval Lua files
 harness.py parses prompts, gates, screenshot directives, and categories
     |
     v
-Roblox Studio starts from an empty baseplate
+Roblox Studio starts from an empty baseplate, or an eval setup provides an existing scene
     |
     v
-model receives the construction prompt and uses Studio MCP tools
+model receives the construction or repair prompt and uses Studio MCP tools
     |
+    +--> optional spatial observation and intent tools
     +--> optional model-side protocol injection
     +--> optional skill injection
     +--> optional legacy helpers/fixer
@@ -38,7 +39,7 @@ The meaningful comparison unit is a complete run configuration, not just a score
 
 - model and API endpoint identity
 - eval set and filter
-- vanilla, protocol, primitives, skills, helpers, fixer, or solver mode
+- vanilla, protocol, primitives, spatial, skills, helpers, fixer, or solver mode
 - temperature
 - maximum tool rounds
 - token cap
@@ -52,7 +53,7 @@ The harness writes these values into the run manifest and results metadata.
 
 `PartPrimitives.lua` is preserved for historical reproduction only. It is not an active research arm.
 
-The model-side decomposition protocol was tested and rejected. It reduced token cost and geometry, but the clean replicate produced an incomplete, miscomposed watchtower with giant floating cylinders. No construction intervention is active now. The benchmark is paused pending a more specific decomposition hypothesis.
+The model-side decomposition protocol was tested and rejected. The repair-first spatial observability prototype is retained as a tool-research direction, not a benchmark arm. Its connected-component linter improved main-assembly repair but did not guarantee visually convincing attachments, and its strict-tolerance variant caused token-budget churn.
 
 `legacy/SpatialHelpers.lua` and `legacy/StructuralFixer.lua` are preserved for historical reproduction only. Their launchers are under `legacy/experiments/`. They are not the next research arm.
 

@@ -23,6 +23,11 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `protocol_0709_1730`: first matched model-side decomposition protocol run; artifacts: `results_pull/protocol_0709_1730/`; 0 model tool errors, lower cost and geometry, visually promising but not promoted
 - `vanilla_0709_1737`: matched vanilla replicate; artifacts: `results_pull/vanilla_0709_1737/`; cottage hit token budget, watchtower visually recognizable but structurally noisy
 - `protocol_0709_1747`: failed clean protocol replicate; artifacts: `results_pull/protocol_0709_1747/`; 0 model tool errors but watchtower was giant floating cylinders and not a valid construction, protocol rejected
+- `vanilla_repair_0709_1854`: raw-tool repair control on seeded partial watchtower; artifacts: `results_pull/vanilla_repair_0709_1854/`; grounded main assembly, but roof and flag remained visibly floating
+- `spatial_repair_0709_1858`: first spatial observation repair; artifacts: `results_pull/spatial_repair_0709_1858/`; main assembly improved, but model falsely claimed a single grounded component
+- `spatial_repair_0709_2110`: first actual component-lint repair; artifacts: `results_pull/spatial_repair_0709_2110/`; visually improved but exceeded token cap after lint-driven retries
+- `spatial_repair_0709_2117`: corrected component-lint repair; artifacts: `results_pull/spatial_repair_0709_2117/`; best within-budget spatial result, retained as prototype evidence
+- `spatial_repair_0709_2122`: strict-contact linter follow-up; artifacts: `results_pull/spatial_repair_0709_2122/`; token cap exceeded and generic tolerance iteration rejected
 
 ## required entry format
 
