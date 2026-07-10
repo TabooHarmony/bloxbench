@@ -28,6 +28,7 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `spatial_repair_0709_2110`: first actual component-lint repair; artifacts: `results_pull/spatial_repair_0709_2110/`; visually improved but exceeded token cap after lint-driven retries
 - `spatial_repair_0709_2117`: corrected component-lint repair; artifacts: `results_pull/spatial_repair_0709_2117/`; best within-budget spatial result, retained as prototype evidence
 - `spatial_repair_0709_2122`: strict-contact linter follow-up; artifacts: `results_pull/spatial_repair_0709_2122/`; token cap exceeded and generic tolerance iteration rejected
+- `spatial_repair_0709_2144`: targeted relation-check follow-up; artifacts: `results_pull/spatial_repair_0709_2144/`; relation tool was not adopted, token cap exceeded, and visual result regressed
 
 ## required entry format
 

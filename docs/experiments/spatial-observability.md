@@ -66,4 +66,13 @@ Keep the spatial observability direction as a prototype. Do not promote the curr
 
 The useful signal is that compact scene state helped the model repair the main assembly better than raw inspection alone. The boundary is equally clear: generic connected-component checks are not enough. A future tool should answer explicit support and attachment relations with compact, actionable diagnostics, rather than tightening one global tolerance.
 
-Do not run more generic component-linter variants. The next design, if pursued, is a relation-level support oracle tested on repair tasks.
+A targeted `spatial_relation_check` follow-up was tested as `spatial_repair_0709_2144`:
+
+- 15 rounds
+- 301,863 input tokens, over the 300k cap
+- 1 execute error
+- 2 edits
+- the model never adopted the new relation tool
+- the final screenshot regressed to an incomplete tower with 3 floating parts and 12 overlaps
+
+This follow-up is negative evidence. Do not retain the relation tool in the active harness or continue iterating on this repair branch without a materially different hypothesis.

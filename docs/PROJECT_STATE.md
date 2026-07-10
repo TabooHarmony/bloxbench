@@ -73,4 +73,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-The next useful work is a design pass for a compact relation-level support oracle. Do not run more generic component-linter variants or broad construction experiments until the oracle has a falsifiable repair task and explicit contact semantics.
+The spatial observability prototype is retained as historical positive evidence, but the relation-oracle follow-up was negative. Stop this repair-tool branch. Do not run more variants until there is a materially different hypothesis with a cheaper adoption path and an explicit visual success criterion.

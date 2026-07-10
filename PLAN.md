@@ -17,6 +17,7 @@ Close the rejected construction interventions, then use repair-first spatial exp
 - dragon usage and anchor follow-up runs completed, but neither passed visual/structural review
 - the spatial observability prototype improved the main repair assembly, but generic component linting did not guarantee visually valid attachments
 - the strict-tolerance lint variant increased churn and exceeded the token cap
+- the targeted relation-oracle follow-up was not adopted, exceeded the token cap, and regressed visually
 
 ## next sequence
 
@@ -24,7 +25,7 @@ Close the rejected construction interventions, then use repair-first spatial exp
 2. record the matched vanilla control, cottage replicate, and failed architecture smoke
 3. record the matched protocol run and its failed replicate
 4. preserve the spatial observability repair prototype and its matched evidence
-5. design, but do not yet implement, a relation-level support oracle
+5. stop this repair-tool branch; do not spend more time without a materially different hypothesis and a cheaper adoption path
 
 ## active constraints
 
