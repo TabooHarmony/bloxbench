@@ -4,7 +4,7 @@ This file contains only active work. The historical 23-question design record is
 
 ## goal
 
-Measure whether the small `PartPrimitives` API improves connected Roblox construction without confusing the model or hiding failures behind the harness.
+Close the PartPrimitives experiment with an evidence-backed verdict, then choose whether to test a decomposition/model intervention or pause Roblox construction work.
 
 ## current status
 
@@ -19,10 +19,10 @@ Measure whether the small `PartPrimitives` API improves connected Roblox constru
 ## next sequence
 
 1. preserve and index the dragon diagnostic and follow-up artifacts
-2. preserve the final clean dragon result and mark `PartPrimitives` as a rejected benchmark arm
-3. do not run the full 10-building primitive experiment
-4. choose a different intervention or task decomposition strategy before reopening the benchmark
-5. keep the primitive-link instrumentation for future controlled experiments
+2. record the matched vanilla control, cottage replicate, and failed architecture smoke
+3. mark `PartPrimitives` as a rejected benchmark intervention
+4. do not run the full 10-building primitive experiment or more primitive smoke tests
+5. choose a decomposition/model intervention or pause the construction benchmark
 
 ## active constraints
 

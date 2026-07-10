@@ -1,9 +1,7 @@
 @echo off
-REM Historical PartPrimitives architecture smoke, retained for reproduction only.
-REM It is not an approval gate. Do not use it as an active benchmark arm.
+REM Matched vanilla control for the rejected PartPrimitives dragon/cottage smoke.
 cd /d C:\Users\Admin\bloxbench
 
-REM Use the persistent Studio/MCP setup. Only kill stale processes when needed.
 taskkill /f /im StudioMCP.exe >nul 2>&1
 taskkill /f /im RobloxStudioBeta.exe >nul 2>&1
 taskkill /f /im RobloxCrashHandler.exe >nul 2>&1
@@ -16,12 +14,9 @@ if not defined STUDIO_EXE (
   echo ERROR: RobloxStudioBeta.exe not found under %LOCALAPPDATA%\Roblox\Versions
   exit /b 1
 )
-set MCP_BAT=%USERPROFILE%\studio-mcp.bat
-set MODEL=cline-pass/deepseek-v4-flash
+set "MCP_BAT=%USERPROFILE%\studio-mcp.bat"
+set "MODEL=cline-pass/deepseek-v4-flash"
 
-echo ============================================
-echo SMOKE TEST: PartPrimitives architecture arm, 3 targeted evals
-echo ============================================
 python harness.py ^
   --evals-dir Evals\Building ^
   --places-dir Places ^
@@ -31,12 +26,7 @@ python harness.py ^
   --output-dir results ^
   --screenshots ^
   --no-gate ^
-  --primitives ^
-  --eval-filter "VB_BUILD_001_cozy_cottage|VB_BUILD_003_watchtower|VB_BUILD_006_market_stall" ^
+  --eval-filter "VB_BUILD_001_cozy_cottage|VB_BUILD_010_dragon_statue" ^
   --startup-wait 45 --eval-timeout 600 ^
   --max-rounds 25 ^
   --max-tokens-per-eval 500000
-
-echo ============================================
-echo SMOKE TEST DONE
-echo ============================================

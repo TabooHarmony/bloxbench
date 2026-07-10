@@ -13,7 +13,7 @@ private operator-facing research branch of BloxBench. this branch is for testing
 
 BloxBench-EXP tests whether an LLM can construct Roblox UIs and 3D structures from an empty place. The harness drives Roblox Studio through MCP, captures structural and visual evidence, and can send screenshots to an OpenAI-compatible vision judge.
 
-The active research question is composition and decomposition, especially whether a small inline primitive API helps the model create connected structures. The active implementation is [`PartPrimitives.lua`](PartPrimitives.lua).
+The primitive-composition hypothesis is now closed. `PartPrimitives.lua` remains in the repository for historical reproduction, but the intervention was rejected after calibration, matched control, dragon, cottage, watchtower, and market-stall evidence. The observed bottleneck remains model decomposition and parent-connected composition.
 
 ## current benchmark shape
 

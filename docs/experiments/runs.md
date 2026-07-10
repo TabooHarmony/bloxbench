@@ -16,7 +16,10 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `anchor_calibration_0709_160219`: zero-token deterministic anchor test; artifacts: `results_pull/anchor_calibration_0709_160219/`; exact top, bottom, side, and back joins verified; generic horizontal-floating flags identified as evaluator false positives
 - `primitives_0709_1608`: instrumented dragon follow-up; artifacts: `results_pull/primitives_0709_1608/`; duplicate chain segments after two model tool errors, contaminated and not promoted
 - `primitives_0709_1616`: near-clean instrumented dragon follow-up; artifacts: `results_pull/primitives_0709_1616/`; zero duplicate primitive names, 4 generic floating flags, 49 overlaps, one model tool error, not promoted
-- `primitives_0709_1621`: final clean-model-error follow-up; artifacts: `results_pull/primitives_0709_1621/`; zero model tool errors, zero duplicate primitive names, 14 generic floating flags, 77 overlaps, visually unacceptable, arm rejected
+- `vanilla_0709_1644`: matched vanilla cottage replicate; artifacts: `results_pull/vanilla_0709_1644/`; 128 parts, 8 floating, 274 overlaps, zero model tool errors
+- `primitives_0709_1648`: matched primitive cottage replicate; artifacts: `results_pull/primitives_0709_1648/`; 71 parts, 4 floating, 53 overlaps, zero model tool errors, visibly better but higher token cost
+- `primitives_0709_1621`: final clean-model-error dragon follow-up; artifacts: `results_pull/primitives_0709_1621/`; zero model tool errors, zero duplicate primitive names, 14 generic floating flags, 77 overlaps, visually unacceptable dragon
+- `primitives_0709_1653`: failed three-eval architecture smoke; artifacts: `results_pull/primitives_0709_1653/`; cottage hit the token budget at 8 parts, watchtower and market stall were visually unreadable, all `passed_cons=false`, intervention rejected
 
 ## required entry format
 

@@ -2,7 +2,7 @@
 
 ## status
 
-active. This is the next arm after the rejected helpers, fixer, and solver experiments.
+rejected. The matched cottage replicate was a useful positive data point, but it was expensive and did not generalize to the three-eval architecture smoke. Preserve the module and instrumentation for historical reproduction only.
 
 ## hypothesis
 
@@ -70,6 +70,36 @@ The latest clean-model-error run `primitives_0709_1621` had zero model tool erro
 
 The near-clean run `primitives_0709_1616` was visually better and also had no duplicate primitive names, but it still had one model execute error and remained crude. The clean run removes the partial-execution explanation without rescuing the visual result.
 
+## cottage replicate
+
+The matched cottage-only replicate completed with zero model tool errors on both sides:
+
+- vanilla `vanilla_0709_1644`: 128 parts, 8 generic floating flags, 274 overlaps, 8 edits, 14 rounds, 292,763 input tokens
+- primitives `primitives_0709_1648`: 71 parts, 4 generic floating flags, 53 overlaps, 5 edits, 25 rounds, 493,206 input tokens
+
+The primitive screenshot is materially more recognizable, with a roof, chimney, porch, and wall framing. It still has a malformed upper roof block and costs substantially more context, so this is a narrow positive signal, not a promotion.
+
+`vanilla_0709_1631` used the same model and matched two-eval settings without primitive injection. It is the first useful directional control, although the cottage had three model tool errors and both runs used `--no-gate`.
+
+- cottage: 113 parts, 10 generic floating flags, 231 overlaps, 11 edits
+- dragon: 60 parts, 13 generic floating flags, 58 overlaps, 1 edit, zero model tool errors
+
+Compared with `primitives_0709_1321`, the primitive cottage used fewer parts and had far fewer generic overlaps, and its front facade was clearer in the reviewed screenshot. Its roof was still detached/boxy. The primitive dragon was not better: the final clean run `primitives_0709_1621` had 54 parts, 14 generic floating flags, 77 overlaps, and a worse silhouette than vanilla despite zero model tool errors and zero duplicate primitive names.
+
+This is evidence for a possible architecture-only benefit, not a general construction win.
+
+## architecture smoke result
+
+`primitives_0709_1653` tested cottage, watchtower, and market stall with primitive injection. It did not justify an architecture-only arm:
+
+- cottage: hit the 500,000 input-token budget at 20 rounds, leaving only 8 parts and a wall-only partial build
+- watchtower: 35 parts, 4 generic floating flags, 23 overlaps; the screenshot was almost entirely black and not visually judgeable
+- market stall: 35 parts, 2 generic floating flags, 29 overlaps, one model tool error; the screenshot was black and incomplete-looking
+
+All three used `--no-gate`, all had `passed_cons=false`, and no visual judge ran. The smoke is execution data, not a quality pass.
+
+The matched cottage-only replicate was a real but non-repeatable positive signal: primitives used 71 parts versus vanilla's 128 and produced a clearer screenshot, but used 493K input tokens and 25 rounds. The subsequent three-eval architecture smoke hit the token cap on cottage and produced unreadable watchtower and market stall screenshots. This does not support an architecture-only benchmark arm.
+
 ## current verdict
 
-Do not promote `PartPrimitives` to the full benchmark arm. The zero-token calibration proves the anchor implementation works, and the clean dragon run proves duplicate execution was not the only problem. The remaining failure is model decomposition/composition and visual construction quality. Preserve the implementation and instrumentation as a reproducible rejected arm, but stop spending prompt or geometry iterations on this dragon path.
+Reject `PartPrimitives` as a benchmark intervention. Do not run the full ten-building experiment or more prompt/geometry iterations on this API. Keep the code, calibration, primitive-link report, and artifacts for historical reproduction. The next useful work must target decomposition or model behavior directly, or pause the construction benchmark.

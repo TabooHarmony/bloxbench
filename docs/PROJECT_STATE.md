@@ -4,16 +4,15 @@
 
 This is a private, experimental operator branch of BloxBench. Upstream is parked. The repository is optimized for one operator running controlled Roblox Studio experiments, not for public onboarding.
 
-## active arm
+No active construction intervention is approved. `PartPrimitives.lua` is preserved as a rejected experiment. The matched cottage replicate was a useful but expensive positive signal; the follow-up architecture smoke failed to generalize. Further work should target decomposition/model behavior directly, or pause the construction benchmark.
 
-`PartPrimitives.lua` is the active intervention. It exposes a small inline API for connected walls, roofs, limbs, stacks, and primitive parts. The hypothesis is that explicit composition primitives reduce decomposition errors, especially floating or disconnected parts.
+The last attempted architecture smoke used:
 
-The next experiment is a two-eval smoke run:
+- `VB_BUILD_001_cozy_cottage`
+- `VB_BUILD_003_watchtower`
+- `VB_BUILD_006_market_stall`
 
-- `VB_BUILD_001_cozy_cottage`: wall, roof, door/window composition
-- `VB_BUILD_010_dragon_statue`: limb chain composition
-
-The operator script is `scripts/windev/smoke_test.bat`.
+The operator script remains under `scripts/windev/` for historical reproduction only.
 
 ## completed decisions
 
@@ -36,7 +35,7 @@ Recent primitive and harness patches have been applied. The important changes ar
 - run manifests record the experiment configuration
 - primitive constructor calls count as edits
 
-Local syntax checks passed. The clean dragon usage run `primitives_0709_1405` confirmed model-authored primitive adoption, but reported 15 floating parts and 33 overlaps. The origin-anchor follow-up `primitives_0709_1411` reduced floating parts to 12 but increased overlaps to 71, and its screenshots remained structurally cluttered and too dark for a quality pass. The zero-token calibration `anchor_calibration_0709_160219` verified exact top, bottom, side, and back face joins; the six horizontal floating flags were evaluator false positives. The instrumented run `primitives_0709_1608` exposed duplicate chain segments after two model tool errors. The final clean-model-error run `primitives_0709_1621` had no model errors and no duplicate primitive names, but remained visually unacceptable with 14 generic floating flags, 77 overlaps, and `passed_cons=false`. The primitive arm is rejected for the full benchmark, while the anchor implementation passed isolation testing.
+Local syntax checks passed. The zero-token calibration verified exact primitive anchor joins. The clean dragon run had no model errors and no duplicate primitive names but remained visually unacceptable. A matched cottage control showed one promising primitive result, with fewer parts and overlaps and a clearer screenshot, but at substantially higher token cost. The follow-up three-eval architecture smoke then hit the token budget on cottage and produced unreadable watchtower and market stall results. `PartPrimitives` is rejected as a benchmark intervention.
 
 ## source map
 
@@ -70,4 +69,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-Do not start the full ten-building experiment with `PartPrimitives`. The zero-token calibration passed, but the final clean-model-error dragon run remained visually unacceptable despite zero model tool errors and zero duplicate primitive names. Preserve the arm as a rejected, reproducible experiment. Return to the broader benchmark only with a different intervention or a materially different task decomposition strategy.
+Do not start the full ten-building experiment with `PartPrimitives`, and do not run more primitive smoke tests. Preserve the negative result and pivot to a different decomposition/model intervention, or pause the construction benchmark.
