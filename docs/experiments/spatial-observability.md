@@ -103,3 +103,14 @@ Matched results on `VB_REPAIR_002_roof_attachment`:
 This is a narrow positive result for the bounded actor/verifier condition on an isolated repair. It is not evidence that the verifier itself improved the result: the actor made the successful edit before verification, and the verifier exhausted its read-only rounds without returning a report. The harness now forces a final report call when a verifier or repair phase exhausts its tool rounds. Replicate or test one harder two-defect repair before promoting Spatial beyond this narrow arm.
 
 The matched two-defect follow-up did not promote the approach. Actor/verifier and vanilla produced the same final structure: the roof was repaired, but the flag remained physically detached at x=1.5 under independent geometry inspection. Vanilla used 90,577 input tokens, 6 rounds, and 0 errors; actor/verifier used 176,774 input tokens, 16 rounds, and 1 `execute_luau` error. The verifier identified the remaining flag defect, but its report was polluted by provider tool-call markup and did not improve the final artifact. The two-defect fixture gate was tightened from 0.25 to 0.1 after this review. Do not promote Spatial from this arm.
+
+## compile-once execution control
+
+The next materially different experiment changed execution shape rather than adding scene observers. On `VB_REPAIR_001_watchtower`, the script-first arm was limited to one edit-bearing initial `execute_luau` call plus one bounded correction phase. It used no spatial tools or geometry APIs.
+
+Matched current results:
+
+- compile-once: `compile_once_repair_0710_1012`, 9 phase rounds, 121,788 input tokens, 1 edit, 0 model tool errors
+- vanilla: `vanilla_repair_0710_1016`, 10 rounds, 192,700 input tokens, 4 edits, 0 model tool errors
+
+Compile-once reduced input tokens by 37% and edit count by 75%. Both artifacts were readable watchtowers. Visual review did not establish a clear quality win: compile-once seated the upper assembly but left a visibly floating flag and omitted some window detail, while vanilla produced a cleaner-looking battlement ring but had more structurally noisy floating window parts. Keep this mode as an execution-control baseline, not as a promoted quality intervention. The next quality hypothesis should change task representation or model/data, not add another verifier or linter.

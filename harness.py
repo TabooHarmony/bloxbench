@@ -110,6 +110,7 @@ class RunConfig:
     spatial_tools: bool = False  # local observation and intent tools
     auto_spatial_feedback: bool = False  # harness-injected post-edit state diff
     actor_verifier: bool = False  # fresh read-only verifier plus one repair pass
+    compile_once_repair: bool = False  # one script-first edit plus one bounded correction pass
     existing_scene: bool = False  # eval setup provides a scene to inspect or repair
 
 
@@ -928,6 +929,7 @@ async def run_fresh_agent_loop(
     max_tokens_per_eval: int,
     label: str,
     allowed_tools: Optional[set[str]] = None,
+    stop_after_edit: bool = False,
 ) -> tuple[str, int]:
     """Run a bounded fresh-context loop for verifier or repair phases."""
     final_text = ""
@@ -937,6 +939,7 @@ async def run_fresh_agent_loop(
         ":Destroy()", ":Clone()", "SetAttribute(", "P.block", "P.cyl", "P.ball", "P.wedge",
         "P.wall", "P.roof", "P.limb", "P.stack", "P.floor",
     )
+    edit_done = False
     for round_idx in range(max_rounds):
         rounds_used = round_idx + 1
         response = await asyncio.wait_for(
@@ -986,7 +989,11 @@ async def run_fresh_agent_loop(
             track_tool_error(m, tool_name, tool_is_err)
             if tool_name == "execute_luau" and any(marker in str(args.get("code", "")) for marker in edit_markers):
                 m.edit_count += 1
+                if stop_after_edit:
+                    edit_done = True
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": tool_out[:4000]})
+        if stop_after_edit and edit_done:
+            break
     if not final_text and not m.error:
         messages.append({
             "role": "user",
@@ -1409,6 +1416,13 @@ return "ok"
                         "\\n\\nThe harness automatically appends a compact AUTO_SPATIAL_FEEDBACK diff after each execute_luau edit. "
                         "Treat it as the current scene state, especially changed parts, disconnected components, and partial-apply warnings."
                     )
+                if run.compile_once_repair:
+                    LUAU_SYSTEM_PROMPT += (
+                        "\\n\\n## Script-first execution\\n"
+                        "Inspect the existing scene, then write one complete raw Luau repair script and execute it once. "
+                        "Do not make incremental geometry edits or replay a whole script after an error. After the first "
+                        "edit-bearing execute_luau call, stop and let the harness run one bounded correction pass."
+                    )
                 if run.protocol_text:
                     LUAU_SYSTEM_PROMPT += "\\n\\n## Model-side construction protocol\\n\\n" + run.protocol_text
                 messages.append({"role": "system", "content": LUAU_SYSTEM_PROMPT})
@@ -1418,6 +1432,11 @@ return "ok"
                         "\\n\\nThis is a bounded actor phase. Make the smallest repair needed for the named defect, "
                         "then stop. Do not redesign valid geometry. A separate verifier will inspect your result."
                     )
+                if run.compile_once_repair:
+                    actor_prompt += (
+                        "\\n\\nThis is the script-first pass. Inspect first, then make all intended changes in one complete "
+                        "edit-bearing execute_luau script. Stop after that script; do not perform incremental follow-up edits."
+                    )
                 messages.append({"role": "user", "content": actor_prompt})
 
                 # 7. LLM tool-use loop
@@ -1426,6 +1445,7 @@ return "ok"
                 LLM_CALL_TIMEOUT = 90  # per-call timeout (seconds)
                 LLM_CALL_RETRIES = 2   # retries on per-call timeout
                 _mcp_dead = False
+                script_first_edit_done = False
                 for round_idx in range(run.max_tool_rounds):
                     # Check if MCP connection is still alive before calling LLM
                     if m.tool_errors >= 2 and m.tool_errors == m.tool_calls:
@@ -1522,6 +1542,8 @@ return "ok"
                                 if any(marker in code for marker in edit_markers):
                                     m.edit_count += 1
                                     is_execute_edit = True
+                                    if run.compile_once_repair:
+                                        script_first_edit_done = True
                             tool_out = ""
                             tool_is_err = False
                             # Handle local spatial tools without sending them to MCP.
@@ -1592,6 +1614,8 @@ return "ok"
                         # LLM finished (stop, length, or content)
                         if message.get("content"):
                             m.final_response_text = str(message["content"])[:2000]
+                        break
+                    if run.compile_once_repair and script_first_edit_done:
                         break
 
                 m.llm_latency_ms = int((time.time() - llm_start) * 1000)
@@ -1664,6 +1688,35 @@ return "ok"
                         m.rounds_used += repair_rounds
                         if repair_text:
                             m.final_response_text = repair_text[:2000]
+
+                if run.compile_once_repair and not m.error:
+                    repair_messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a fresh bounded correction actor. The initial script-first repair has already "
+                                "executed. Inspect the current scene with read-only tools, then either return VERIFIED if "
+                                "the task is satisfied or execute exactly one complete raw Luau correction script. Preserve "
+                                "valid geometry and never replay the original build. Stop after that one correction script."
+                            ),
+                        },
+                        {"role": "user", "content": ev.prompt_text},
+                    ]
+                    repair_text, repair_rounds = await run_fresh_agent_loop(
+                        model,
+                        repair_messages,
+                        openai_tools,
+                        session,
+                        m,
+                        max_rounds=5,
+                        max_tokens_per_eval=run.max_tokens_per_eval,
+                        label="script-first repair",
+                        stop_after_edit=True,
+                    )
+                    m.repair_rounds = repair_rounds
+                    m.rounds_used += repair_rounds
+                    if repair_text:
+                        m.final_response_text = repair_text[:2000]
 
                 # 9. Re-inject LoadedCode + EvalUtils (LLM may have wiped them)
                 await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": ENSURE_LOADED_CODE}, m)
@@ -2279,6 +2332,7 @@ def parse_args():
     p.add_argument("--spatial-tools", action="store_true", help="Expose local spatial_snapshot and spatial intent tools without adding a builder API")
     p.add_argument("--auto-spatial-feedback", action="store_true", help="Inject compact post-edit spatial diffs after model execute_luau calls without exposing new tools")
     p.add_argument("--actor-verifier", action="store_true", help="Run a fresh read-only verifier and one bounded repair pass after the actor")
+    p.add_argument("--compile-once-repair", action="store_true", help="Run one script-first edit and one bounded correction pass")
     p.add_argument("--existing-scene", action="store_true", help="Tell the model the eval setup provides an existing scene to inspect or repair")
     p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
     p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
@@ -2389,6 +2443,7 @@ async def main():
         spatial_tools=args.spatial_tools,
         auto_spatial_feedback=args.auto_spatial_feedback,
         actor_verifier=args.actor_verifier,
+        compile_once_repair=args.compile_once_repair,
         existing_scene=args.existing_scene,
     )
 
@@ -2458,6 +2513,8 @@ async def main():
         mode = "auto_feedback"
     elif args.actor_verifier:
         mode = "actor_verifier"
+    elif args.compile_once_repair:
+        mode = "compile_once"
     else:
         mode = "vanilla"
     if args.fixer:
@@ -2486,6 +2543,7 @@ async def main():
         "spatial_tools": args.spatial_tools,
         "auto_spatial_feedback": args.auto_spatial_feedback,
         "actor_verifier": args.actor_verifier,
+        "compile_once_repair": args.compile_once_repair,
         "existing_scene": args.existing_scene,
         "solver": solver_enabled,
         "fixer": args.fixer,
@@ -2537,6 +2595,8 @@ async def main():
         manifest["skills_mode"] = "auto_feedback"
     elif args.actor_verifier:
         manifest["skills_mode"] = "actor_verifier"
+    elif args.compile_once_repair:
+        manifest["skills_mode"] = "compile_once"
     else:
         manifest["skills_mode"] = "vanilla"
     if judge_enabled:

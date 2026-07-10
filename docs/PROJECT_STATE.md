@@ -4,7 +4,7 @@
 
 This is a private, experimental operator branch of BloxBench. Upstream is parked. The repository is optimized for one operator running controlled Roblox Studio experiments, not for public onboarding.
 
-No active construction benchmark arm is approved. `PartPrimitives.lua` and the decomposition protocol are preserved as rejected experiments. A repair-first spatial observability prototype produced a useful but incomplete signal and is retained for tool research, not as a promoted arm.
+No active construction benchmark arm is approved. `PartPrimitives.lua` and the decomposition protocol are preserved as rejected experiments. A repair-first spatial observability prototype produced a useful but incomplete signal and is retained for tool research, not as a promoted arm. The compile-once/repair mode is retained as an execution-control experiment, not as proof of visual-quality improvement.
 
 The last attempted architecture smoke used:
 
@@ -26,6 +26,7 @@ The operator script remains under `scripts/windev/` for historical reproduction 
 - automatic post-edit feedback is retained as an experimental harness feature but is not a quality intervention
 - the one cheap alternate model comparison did not enter edit mode, so it is not evidence of model quality
 - the repair-first spatial observability prototype is retained as a tool-research direction, not an approved benchmark arm
+- compile-once/repair reduced tokens and edit churn against a current vanilla control, but did not clearly improve the final screenshot
 
 ## current code state
 
@@ -75,4 +76,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-The spatial observability prototype is retained as historical positive evidence. The focused actor/verifier condition repaired an isolated detached roof while vanilla made zero edits, but the verifier did not finish its report. The matched two-defect follow-up produced the same physically incomplete artifact as vanilla at substantially higher cost. Freeze Spatial as a general intervention and redirect to a materially different path.
+The spatial observability prototype is retained as historical positive evidence. The focused actor/verifier condition repaired an isolated detached roof while vanilla made zero edits, but the verifier did not finish its report. The matched two-defect follow-up produced the same physically incomplete artifact as vanilla at substantially higher cost. Compile-once/repair then reduced input tokens by 37% and edit count from 4 to 1 against the current vanilla watchtower control, but visual review found no clear quality win. Keep compile-once as an execution-control mode and redirect quality work to task representation or model/data improvements.

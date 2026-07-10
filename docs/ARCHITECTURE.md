@@ -55,6 +55,8 @@ The harness writes these values into the run manifest and results metadata.
 
 The model-side decomposition protocol was tested and rejected. The repair-first spatial observability prototype is retained as a tool-research direction, not a benchmark arm. Its connected-component linter improved main-assembly repair but did not guarantee visually convincing attachments. Relation checking was not adopted, automatic post-edit feedback caused a visually bad early stop, and the cheap alternate model did not edit. A fresh-context actor/verifier condition produced one narrow positive on an isolated roof repair, but its two-defect follow-up matched vanilla at higher cost and left the flag physically detached. Spatial is frozen except as historical evidence.
 
+The retained compile-once execution mode changes loop shape without adding geometry APIs: one complete raw Luau edit followed by one bounded correction pass. It reduced token and edit churn against the current vanilla watchtower control, but visual review did not establish a quality win. Use it as a controlled baseline for future task-representation or model/data experiments, not as a scene-understanding intervention.
+
 `legacy/SpatialHelpers.lua` and `legacy/StructuralFixer.lua` are preserved for historical reproduction only. Their launchers are under `legacy/experiments/`. They are not the next research arm.
 
 The old spatial solver is external to this repository and is only used when an explicit solver path is supplied.
