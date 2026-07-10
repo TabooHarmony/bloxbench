@@ -20,6 +20,7 @@ Close the rejected construction interventions, then use repair-first spatial exp
 - the targeted relation-oracle follow-up was not adopted, exceeded the token cap, and regressed visually
 - automatic post-edit feedback reduced rounds and tokens but produced a visually worse early stop
 - the cheap MiniMax M3 comparison inspected the scene but made zero edits
+- the corrected focused actor/verifier roof repair beat its vanilla control, but the verifier exhausted its read-only rounds without producing a report
 
 ## next sequence
 
@@ -27,7 +28,8 @@ Close the rejected construction interventions, then use repair-first spatial exp
 2. record the matched vanilla control, cottage replicate, and failed architecture smoke
 3. record the matched protocol run and its failed replicate
 4. preserve the spatial observability repair prototype and its matched evidence
-5. stop this repair-tool branch; do not spend more time without a materially different hypothesis and a cheaper adoption path
+5. keep the construction-tool branch paused except for the narrow actor/verifier follow-up
+6. verify the forced verifier finalization, then run one matched two-defect repair before deciding whether Spatial expands
 
 ## active constraints
 

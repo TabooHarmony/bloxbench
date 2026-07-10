@@ -109,6 +109,7 @@ class RunConfig:
     protocol_text: Optional[str] = None  # model-side decomposition protocol
     spatial_tools: bool = False  # local observation and intent tools
     auto_spatial_feedback: bool = False  # harness-injected post-edit state diff
+    actor_verifier: bool = False  # fresh read-only verifier plus one repair pass
     existing_scene: bool = False  # eval setup provides a scene to inspect or repair
 
 
@@ -279,6 +280,9 @@ class EvalMetrics:
     time_breakdown: dict = field(default_factory=dict)  # {llm_ms, tool_ms, screenshot_ms, setup_ms}
     final_response_text: Optional[str] = None  # model's last message
     fixer_report: Optional[str] = None  # StructuralFixer output log
+    verifier_report: Optional[str] = None
+    verifier_rounds: int = 0
+    repair_rounds: int = 0
 
 
 # �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
@@ -914,6 +918,96 @@ def track_tool_error(m: EvalMetrics, tool_name: str, is_error: bool):
         m.tool_errors += 1
 
 
+async def run_fresh_agent_loop(
+    model: ModelConfig,
+    messages: list,
+    tools: list,
+    session,
+    m: EvalMetrics,
+    max_rounds: int,
+    max_tokens_per_eval: int,
+    label: str,
+    allowed_tools: Optional[set[str]] = None,
+) -> tuple[str, int]:
+    """Run a bounded fresh-context loop for verifier or repair phases."""
+    final_text = ""
+    rounds_used = 0
+    edit_markers = (
+        "Instance.new", ".Source =", ".Position =", ".CFrame =", ".Size =", ".Parent =",
+        ":Destroy()", ":Clone()", "SetAttribute(", "P.block", "P.cyl", "P.ball", "P.wedge",
+        "P.wall", "P.roof", "P.limb", "P.stack", "P.floor",
+    )
+    for round_idx in range(max_rounds):
+        rounds_used = round_idx + 1
+        response = await asyncio.wait_for(
+            llm_chat(model, messages, tools, temperature=0),
+            timeout=90,
+        )
+        m.llm_calls += 1
+        usage = response.get("usage", {})
+        m.total_tokens_in += usage.get("prompt_tokens", 0)
+        m.total_tokens_out += usage.get("completion_tokens", 0)
+        m.max_context_tokens = max(m.max_context_tokens, usage.get("prompt_tokens", 0))
+        if m.total_tokens_in > max_tokens_per_eval:
+            m.error = f"token_budget_exceeded: {m.total_tokens_in} tokens"
+            m.error_category = "token_budget_exceeded"
+            break
+
+        choice = response["choices"][0]
+        message = choice["message"]
+        messages.append(message)
+        finish = choice.get("finish_reason", "")
+        if finish != "tool_calls" or not message.get("tool_calls"):
+            final_text = str(message.get("content") or "")
+            break
+
+        for tc in message["tool_calls"]:
+            m.tool_calls += 1
+            func = tc["function"]
+            tool_name = func["name"]
+            if tool_name not in m.tools_used:
+                m.tools_used.append(tool_name)
+            m.tool_call_sequence.append(tool_name)
+            try:
+                args = json.loads(func.get("arguments", "{}"))
+            except json.JSONDecodeError:
+                args = {}
+            if allowed_tools is not None and tool_name not in allowed_tools:
+                tool_out = f"Tool error: {label} is read-only; {tool_name} is not allowed"
+                tool_is_err = True
+            else:
+                try:
+                    result = await session.call_tool(tool_name, args)
+                    tool_out = get_tool_text(result)
+                    tool_is_err = is_tool_error(result, tool_out)
+                except Exception as exc:
+                    tool_out = f"Tool error: {exc}"
+                    tool_is_err = True
+            track_tool_error(m, tool_name, tool_is_err)
+            if tool_name == "execute_luau" and any(marker in str(args.get("code", "")) for marker in edit_markers):
+                m.edit_count += 1
+            messages.append({"role": "tool", "tool_call_id": tc["id"], "content": tool_out[:4000]})
+    if not final_text and not m.error:
+        messages.append({
+            "role": "user",
+            "content": f"{label}: stop using tools now and return the requested final report or repair completion text.",
+        })
+        response = await asyncio.wait_for(
+            llm_chat(model, messages, [], temperature=0),
+            timeout=90,
+        )
+        m.llm_calls += 1
+        usage = response.get("usage", {})
+        m.total_tokens_in += usage.get("prompt_tokens", 0)
+        m.total_tokens_out += usage.get("completion_tokens", 0)
+        m.max_context_tokens = max(m.max_context_tokens, usage.get("prompt_tokens", 0))
+        if m.total_tokens_in <= max_tokens_per_eval:
+            final_text = str(response.get("choices", [{}])[0].get("message", {}).get("content") or "")
+            rounds_used += 1
+        else:
+            m.error = f"token_budget_exceeded: {m.total_tokens_in} tokens"
+            m.error_category = "token_budget_exceeded"
+    return final_text, rounds_used
 async def harness_call_tool(session, tool_name: str, args: dict, m: EvalMetrics):
     """Call an MCP tool from harness code with error tracking.
 
@@ -1318,7 +1412,13 @@ return "ok"
                 if run.protocol_text:
                     LUAU_SYSTEM_PROMPT += "\\n\\n## Model-side construction protocol\\n\\n" + run.protocol_text
                 messages.append({"role": "system", "content": LUAU_SYSTEM_PROMPT})
-                messages.append({"role": "user", "content": ev.prompt_text})
+                actor_prompt = ev.prompt_text
+                if run.actor_verifier:
+                    actor_prompt += (
+                        "\\n\\nThis is a bounded actor phase. Make the smallest repair needed for the named defect, "
+                        "then stop. Do not redesign valid geometry. A separate verifier will inspect your result."
+                    )
+                messages.append({"role": "user", "content": actor_prompt})
 
                 # 7. LLM tool-use loop
                 llm_start = time.time()
@@ -1497,6 +1597,73 @@ return "ok"
                 m.llm_latency_ms = int((time.time() - llm_start) * 1000)
                 m.rounds_used = round_idx + 1
                 m.time_breakdown["llm_ms"] = m.llm_latency_ms
+
+                if run.actor_verifier and not m.error:
+                    verifier_allowed = {"get_studio_state", "search_game_tree", "inspect_instance"}
+                    verifier_tools = [
+                        tool for tool in openai_tools
+                        if tool.get("function", {}).get("name") in verifier_allowed
+                    ]
+                    verifier_messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a fresh-context Roblox scene verifier. Do not edit the workspace and do not call "
+                                "execute_luau. Inspect the existing scene with read-only tools. Return either VERIFIED "
+                                "or a short list of concrete defects, naming the affected parts and the required repair."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Verify this repair task:\\n{ev.prompt_text}\\n\\n"
+                                "Check whether LooseRoof is centered over and supported by the lookout column/platform, "
+                                "and whether the other existing parts were preserved."
+                            ),
+                        },
+                    ]
+                    verifier_text, verifier_rounds = await run_fresh_agent_loop(
+                        model,
+                        verifier_messages,
+                        verifier_tools,
+                        session,
+                        m,
+                        max_rounds=4,
+                        max_tokens_per_eval=run.max_tokens_per_eval,
+                        label="verifier",
+                        allowed_tools=verifier_allowed,
+                    )
+                    m.verifier_report = verifier_text[:4000]
+                    m.verifier_rounds = verifier_rounds
+                    m.rounds_used += verifier_rounds
+                    needs_repair = not verifier_text.strip().lower().startswith("verified")
+                    if needs_repair and not m.error:
+                        repair_messages = [
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are the repair actor in a fresh bounded pass. Use raw execute_luau only for the "
+                                    "smallest necessary geometry change. Preserve all valid existing parts. Inspect before "
+                                    "editing, apply the verifier's concrete repair, then stop.\\n\\n"
+                                    f"VERIFIER REPORT:\\n{verifier_text[:4000]}"
+                                ),
+                            },
+                            {"role": "user", "content": ev.prompt_text},
+                        ]
+                        repair_text, repair_rounds = await run_fresh_agent_loop(
+                            model,
+                            repair_messages,
+                            openai_tools,
+                            session,
+                            m,
+                            max_rounds=4,
+                            max_tokens_per_eval=run.max_tokens_per_eval,
+                            label="repair actor",
+                        )
+                        m.repair_rounds = repair_rounds
+                        m.rounds_used += repair_rounds
+                        if repair_text:
+                            m.final_response_text = repair_text[:2000]
 
                 # 9. Re-inject LoadedCode + EvalUtils (LLM may have wiped them)
                 await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": ENSURE_LOADED_CODE}, m)
@@ -2111,6 +2278,7 @@ def parse_args():
     p.add_argument("--protocol-path", default=None, help="Inject a model-side construction protocol into the system prompt")
     p.add_argument("--spatial-tools", action="store_true", help="Expose local spatial_snapshot and spatial intent tools without adding a builder API")
     p.add_argument("--auto-spatial-feedback", action="store_true", help="Inject compact post-edit spatial diffs after model execute_luau calls without exposing new tools")
+    p.add_argument("--actor-verifier", action="store_true", help="Run a fresh read-only verifier and one bounded repair pass after the actor")
     p.add_argument("--existing-scene", action="store_true", help="Tell the model the eval setup provides an existing scene to inspect or repair")
     p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
     p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
@@ -2220,6 +2388,7 @@ async def main():
         fixer=args.fixer,
         spatial_tools=args.spatial_tools,
         auto_spatial_feedback=args.auto_spatial_feedback,
+        actor_verifier=args.actor_verifier,
         existing_scene=args.existing_scene,
     )
 
@@ -2287,6 +2456,8 @@ async def main():
         mode = "spatial"
     elif args.auto_spatial_feedback:
         mode = "auto_feedback"
+    elif args.actor_verifier:
+        mode = "actor_verifier"
     else:
         mode = "vanilla"
     if args.fixer:
@@ -2314,6 +2485,7 @@ async def main():
         "protocol_path": str(Path(args.protocol_path).resolve()) if args.protocol_path else None,
         "spatial_tools": args.spatial_tools,
         "auto_spatial_feedback": args.auto_spatial_feedback,
+        "actor_verifier": args.actor_verifier,
         "existing_scene": args.existing_scene,
         "solver": solver_enabled,
         "fixer": args.fixer,
@@ -2363,6 +2535,8 @@ async def main():
         manifest["skills_mode"] = "spatial"
     elif args.auto_spatial_feedback:
         manifest["skills_mode"] = "auto_feedback"
+    elif args.actor_verifier:
+        manifest["skills_mode"] = "actor_verifier"
     else:
         manifest["skills_mode"] = "vanilla"
     if judge_enabled:

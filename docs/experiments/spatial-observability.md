@@ -90,3 +90,14 @@ Operationally:
 - no token-cap failure
 
 Visually it was a failure. The model stopped after a bad edit that moved `LooseRoof` into the doorway area, removed the coherent lookout assembly, and left the flag floating. Efficiency without visual correctness is not a win, so this path is retained only as an experimental harness feature and not promoted.
+
+## focused actor-verifier follow-up
+
+The first roof fixture was invalid and excluded: it used a horizontal cylinder as the lookout column, so numerical roof alignment did not imply visual support. The corrected fixture used a vertical block column and a 16-part preservation gate.
+
+Matched results on `VB_REPAIR_002_roof_attachment`:
+
+- actor/verifier: `actor_verifier_repair_0709_2307`, 14 phase rounds, 148,128 input tokens, 1 edit, roof moved from x=10 to x=0, all 16 parts preserved, visually correct roof support
+- vanilla: `vanilla_repair_0709_2311`, 6 rounds, 91,573 input tokens, 0 edits, roof remained at x=10 and visibly detached
+
+This is a narrow positive result for the bounded actor/verifier condition on an isolated repair. It is not evidence that the verifier itself improved the result: the actor made the successful edit before verification, and the verifier exhausted its read-only rounds without returning a report. The harness now forces a final report call when a verifier or repair phase exhausts its tool rounds. Replicate or test one harder two-defect repair before promoting Spatial beyond this narrow arm.

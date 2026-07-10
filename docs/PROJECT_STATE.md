@@ -75,4 +75,4 @@ All of these are ignored by git. Preserve an important run by copying it into `r
 
 ## next verification
 
-The spatial observability prototype is retained as historical positive evidence, but relation checking and automatic post-edit feedback did not produce a visual win. The cheap alternate model comparison did not edit. Stop this construction-tool branch. Do not run more variants until there is a materially different hypothesis with a cheaper adoption path and an explicit visual success criterion.
+The spatial observability prototype is retained as historical positive evidence. The focused actor/verifier condition repaired an isolated detached roof while vanilla made zero edits, but the verifier did not finish its report. Keep Spatial narrow and run one matched two-defect repair after verifying forced finalization. Do not promote it to a general construction system from this single positive.
