@@ -50,11 +50,14 @@ def generate_single_report(data: dict) -> str:
     config = data.get("config", {})
     summary = data.get("summary", {})
     evals = data.get("evals", [])
+    ui_track = summary.get("ui_track")
 
     # Header
     lines.append(f"# BloxBench Report: {model_name}")
     lines.append(f"\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     lines.append(f"Config: Pass@{config.get('pass_n', 1)}, Max rounds: {config.get('max_rounds', 25)}")
+    if config.get("track"):
+        lines.append(f"Track: {config['track']}")
 
     # Executive Summary
     lines.append("\n## Executive Summary\n")
@@ -65,15 +68,17 @@ def generate_single_report(data: dict) -> str:
     judge_evals = summary.get("judge_evals", 0)
     lines.append(f"- **Structural gate pass rate**: {gate_rate}% ({passed}/{total})")
     
-    if judge_evals:
+    if judge_evals and not ui_track:
         lines.append(f"- **Judge-scored evals**: {judge_evals}")
         lines.append(f"- **Avg judge overall**: {fmt_score(summary.get('avg_judge_overall'))}")
         lines.append(f"- **Avg correctness**: {fmt_score(summary.get('avg_judge_correctness'))}")
         lines.append(f"- **Avg layout**: {fmt_score(summary.get('avg_judge_layout'))}")
         lines.append(f"- **Avg aesthetics**: {fmt_score(summary.get('avg_judge_aesthetics'))}")
         lines.append(f"- **Avg completeness**: {fmt_score(summary.get('avg_judge_completeness'))}")
-    else:
+    elif not judge_evals:
         lines.append("- **Judge scoring**: not enabled or no evals passed gate")
+    else:
+        lines.append(f"- **UI visual judge-scored evals**: {judge_evals}")
 
     lines.append(f"- **Avg LLM calls**: {summary.get('avg_llm_calls', 0)}")
     lines.append(f"- **Avg tokens in**: {summary.get('avg_tokens_in', 0)}")
@@ -95,7 +100,7 @@ def generate_single_report(data: dict) -> str:
         lines.append(f"- **Errors**: {non_none}")
 
     # Judge score profile (radar-style text)
-    if judge_evals:
+    if judge_evals and not ui_track:
         lines.append("\n### Judge Score Profile\n")
         dims = ["correctness", "layout", "aesthetics", "completeness"]
         for dim in dims:
@@ -104,16 +109,46 @@ def generate_single_report(data: dict) -> str:
                 bar = "█" * int(val) + "░" * (5 - int(val))
                 lines.append(f"- {dim:15s} {bar} {val:.1f}/5")
 
+    # Separate UI track summary
+    if ui_track:
+        lines.append("\n## UI Track\n")
+        lines.append("Functional correctness remains the hard scene/game gate. Visual scoring is conditional on functional passes; unresolved visual evidence is reported separately.")
+        lines.append(f"- **Functional pass rate**: {ui_track.get('functional_pass_rate')}% ({ui_track.get('functional_passed')}/{ui_track.get('functional_scored_evals')})")
+        lines.append(f"- **Conditional visual pass rate**: {ui_track.get('conditional_visual_pass_rate', ui_track.get('visual_pass_rate'))}% ({ui_track.get('visual_passed')}/{ui_track.get('visual_scored_evals')})")
+        lines.append(f"- **Visual evidence coverage**: {ui_track.get('visual_evidence_coverage')}% of functional passes")
+        lines.append(f"- **Confirmed combined pass rate**: {ui_track.get('confirmed_combined_pass_rate', ui_track.get('combined_pass_rate'))}% ({ui_track.get('confirmed_combined_passed', ui_track.get('combined_passed'))}/{ui_track.get('confirmed_combined_scored_evals', ui_track.get('combined_scored_evals'))})")
+        lines.append(f"- **Combined pass evidence bounds**: {ui_track.get('combined_pass_rate_lower_bound')}%–{ui_track.get('combined_pass_rate_upper_bound')}%")
+        lines.append(f"- **Visual review required**: {ui_track.get('visual_review_required', 0)}")
+        lines.append(f"- **Average visual score**: {fmt_score(ui_track.get('avg_visual_score'))}/5")
+        dimensions = ui_track.get("avg_visual_dimensions", {})
+        if dimensions:
+            lines.append("\n### UI Visual Dimensions\n")
+            for dimension, score in dimensions.items():
+                lines.append(f"- **{dimension}**: {fmt_score(score)}/5")
+
     # Per-eval results
     lines.append("\n## Per-Eval Results\n")
-    lines.append("| Eval | Gate | Judge | Correct | Layout | Aesth | Compl | Rounds | Tokens In | Edits | Time |")
-    lines.append("|------|------|-------|---------|--------|-------|-------|--------|-----------|-------|------|")
+    if ui_track:
+        lines.append("| Eval | Functional | Visual | Hierarchy | Composition | Spacing | Typography | Contrast | State | Art direction |")
+        lines.append("|------|------------|--------|----------|-------------|---------|------------|----------|-------|--------------|")
+    else:
+        lines.append("| Eval | Gate | Judge | Correct | Layout | Aesth | Compl | Rounds | Tokens In | Edits | Time |")
+        lines.append("|------|------|-------|---------|--------|-------|-------|--------|-----------|-------|------|")
 
     for e in sorted(evals, key=lambda x: x.get("scenario", "")):
         scenario = e.get("scenario", "")
         gate = "✓" if e.get("passed") else "✗"
         js = e.get("judge_scores") or {}
         overall = e.get("judge_overall")
+        if ui_track:
+            visual = e.get("visual_score", overall)
+            visual_status = fmt_score(visual) if visual is not None else "review"
+            dimensions = [fmt_score(js.get(key)) if js.get(key) is not None else "—" for key in (
+                "hierarchy", "composition", "spacing", "typography", "contrast", "state_clarity", "art_direction"
+            )]
+            lines.append("| " + " | ".join([scenario, gate, visual_status, *dimensions]) + " |")
+            continue
+
         j_str = fmt_score(overall) if overall else "—"
         corr = fmt_score(js.get("correctness")) if js.get("correctness") else "—"
         layout = fmt_score(js.get("layout")) if js.get("layout") else "—"
@@ -153,23 +188,33 @@ def generate_single_report(data: dict) -> str:
             seq_len = len(e.get("tool_call_sequence", []))
             lines.append(f"- {e['scenario']}: {e['rounds_used']} rounds, {seq_len} tool calls, judge={e['judge_overall']}/5, {fmt_ms(e.get('total_time_ms', 0))}")
 
-    # Code vs visual gap
-    lines.append(f"\n### Code vs Visual Quality\n")
-    for e in evals:
-        js = e.get("judge_scores") or {}
-        script_count = (e.get("created_scripts") or {}).get("_count", 0)
-        if js and script_count:
-            corr = js.get("correctness", 0)
-            aesth = js.get("aesthetics", 0)
-            gap = corr - aesth
-            profile = ""
-            if gap > 1:
-                profile = "functional but ugly"
-            elif gap < -1:
-                profile = "pretty but broken"
-            elif corr >= 4 and aesth >= 4:
-                profile = "well-rounded"
-            lines.append(f"- {e['scenario']}: {script_count} scripts, correctness={corr}/5, aesthetics={aesth}/5 → {profile}")
+    # Functional vs visual quality
+    if ui_track:
+        lines.append("\n### Functional vs Visual Quality\n")
+        for e in evals:
+            visual = e.get("visual_score")
+            if visual is None:
+                continue
+            functional = "pass" if e.get("passed") else "fail"
+            visual_label = "pass" if visual >= ui_track.get("visual_pass_threshold", 3.0) else "fail"
+            lines.append(f"- {e['scenario']}: functional={functional}, visual={visual_label} ({visual:.1f}/5)")
+    else:
+        lines.append(f"\n### Code vs Visual Quality\n")
+        for e in evals:
+            js = e.get("judge_scores") or {}
+            script_count = (e.get("created_scripts") or {}).get("_count", 0)
+            if js and script_count:
+                corr = js.get("correctness", 0)
+                aesth = js.get("aesthetics", 0)
+                gap = corr - aesth
+                profile = ""
+                if gap > 1:
+                    profile = "functional but ugly"
+                elif gap < -1:
+                    profile = "pretty but broken"
+                elif corr >= 4 and aesth >= 4:
+                    profile = "well-rounded"
+                lines.append(f"- {e['scenario']}: {script_count} scripts, correctness={corr}/5, aesthetics={aesth}/5 → {profile}")
 
     # Per-eval judge reasoning (if available)
     lines.append("\n## Judge Reasoning\n")
@@ -214,14 +259,20 @@ def generate_comparison_report(all_data: list[dict], labels: list[str]) -> str:
     lines.append("\n## Summary Comparison\n")
     lines.append("| Metric | " + " | ".join(labels) + " |")
     lines.append("|--------|" + "|".join(["--------"] * len(labels)) + "|")
+    ui_comparison = [data.get("summary", {}).get("ui_track") for data in all_data]
 
     metrics = [
         ("Gate pass rate", "pass_rate", "%"),
-        ("Avg judge overall", "avg_judge_overall", "score"),
-        ("Avg correctness", "avg_judge_correctness", "score"),
-        ("Avg layout", "avg_judge_layout", "score"),
-        ("Avg aesthetics", "avg_judge_aesthetics", "score"),
-        ("Avg completeness", "avg_judge_completeness", "score"),
+    ]
+    if not any(ui_comparison):
+        metrics.extend([
+            ("Avg judge overall", "avg_judge_overall", "score"),
+            ("Avg correctness", "avg_judge_correctness", "score"),
+            ("Avg layout", "avg_judge_layout", "score"),
+            ("Avg aesthetics", "avg_judge_aesthetics", "score"),
+            ("Avg completeness", "avg_judge_completeness", "score"),
+        ])
+    metrics.extend([
         ("Avg LLM calls", "avg_llm_calls", "num"),
         ("Avg tokens in", "avg_tokens_in", "num"),
         ("Avg tokens out", "avg_tokens_out", "num"),
@@ -232,7 +283,7 @@ def generate_comparison_report(all_data: list[dict], labels: list[str]) -> str:
         ("Avg tool sequence len", "avg_tool_call_sequence_len", "num"),
         ("Avg created scripts", "avg_created_scripts", "num"),
         ("Avg LLM time", "avg_time_llm", "ms"),
-    ]
+    ])
 
     for label, key, fmt in metrics:
         vals = []
@@ -259,6 +310,33 @@ def generate_comparison_report(all_data: list[dict], labels: list[str]) -> str:
             else:
                 vals.append(str(v))
         lines.append(f"| {label} | " + " | ".join(vals) + " |")
+
+    if any(ui_comparison):
+        lines.append("\n## UI Track Comparison\n")
+        lines.append("| Metric | " + " | ".join(labels) + " |")
+        lines.append("|--------|" + "|".join(["--------"] * len(labels)) + "|")
+        for label, key in [
+            ("Functional pass rate", "functional_pass_rate"),
+            ("Conditional visual pass rate", "conditional_visual_pass_rate"),
+            ("Visual evidence coverage", "visual_evidence_coverage"),
+            ("Confirmed combined pass rate", "confirmed_combined_pass_rate"),
+            ("Combined lower bound", "combined_pass_rate_lower_bound"),
+            ("Combined upper bound", "combined_pass_rate_upper_bound"),
+            ("Average visual score", "avg_visual_score"),
+            ("Visual review required", "visual_review_required"),
+        ]:
+            vals = []
+            for ui_summary in ui_comparison:
+                value = ui_summary.get(key) if ui_summary else None
+                if value is None:
+                    vals.append("N/A")
+                elif "rate" in key or "coverage" in key:
+                    vals.append(f"{value}%")
+                elif key == "avg_visual_score":
+                    vals.append(f"{value:.1f}/5")
+                else:
+                    vals.append(str(value))
+            lines.append(f"| {label} | " + " | ".join(vals) + " |")
 
     # Per-eval pairwise
     lines.append("\n## Per-Eval Comparison\n")

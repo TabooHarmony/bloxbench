@@ -18,6 +18,7 @@ The primitive-composition hypothesis is now closed. `PartPrimitives.lua` remains
 ## current benchmark shape
 
 - 5 UI construction evals under `Evals/UI/`
+- `--track ui` runs those tagged evals with separate functional, visual, and combined results
 - 10 building construction evals under `Evals/Building/`
 - one empty baseplate at `Places/baseplate.rbxl`
 - reference implementations under `Reference/`
@@ -29,6 +30,7 @@ The primitive-composition hypothesis is now closed. `PartPrimitives.lua` remains
 ```text
 harness.py              benchmark runner and Studio orchestration
 judge.py                OpenAI-compatible visual judge integration
+style_extraction.py     conservative project-local UI reference token extraction
 generate_report.py      text reports for completed runs
 gen_results_html.py     local HTML comparison viewer
 PartPrimitives.lua      rejected primitive composition module, retained for reproduction
