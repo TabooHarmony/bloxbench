@@ -1,72 +1,58 @@
-# BloxBench-EXP Project State
+# BloxBench Project State
 
-## identity
+## Identity
 
-This is a private, experimental operator branch of BloxBench. Upstream is parked. The repository is optimized for one operator running controlled Roblox Studio experiments, not for public onboarding.
+BloxBench is a construction benchmark for Roblox Studio. It tests whether an agent can build Roblox UI and 3D structures from prompts. The benchmark captures screenshots, structure dumps, functional gates, and visual judge scores.
 
-No active construction benchmark arm is approved. `PartPrimitives.lua` and the decomposition protocol are preserved as rejected experiments. A repair-first spatial observability prototype produced a useful but incomplete signal and is retained for tool research, not as a promoted arm. The compile-once/repair mode is retained as an execution-control experiment, not as proof of visual-quality improvement.
+Current shape:
+- 5 UI construction evals under `Evals/UI/` (tagged with `--track ui`)
+- 10 building construction evals under `Evals/Building/`
+- 3 RepairCore qualification fixtures under `Evals/RepairCore/`
+- Visual judge with validation and provenance tracking
+- UI visual track with separate functional/visual/combined scoring
+- Style extraction for project-local UI references
 
-The last attempted architecture smoke used:
+The spatial intervention research (relation context, primitives, helpers, fixer, solver, actor/verifier, compile-once, repair contracts) is frozen. The fine-tuning pilot is in a separate repository at `/root/partwise-trainer/`.
 
-- `VB_BUILD_001_cozy_cottage`
-- `VB_BUILD_003_watchtower`
-- `VB_BUILD_006_market_stall`
+## Current Code State
 
-The operator script remains under `scripts/windev/` for historical reproduction only.
+Recent work added:
+- Judge response validation with score key matching and integer range checks
+- Evidence provenance with SHA-256 hashes for prompt, rubric, screenshots, structure dump
+- UI visual track (`ui_track.py`) separating functional passes, conditional visual passes, and confirmed combined rate with evidence bounds
+- Style extraction (`style_extraction.py`) for conservative regex-based token extraction from reference Lua files
+- RepairCore qualification fixtures with deterministic gates
+- Report generation for UI track dimensions and comparison tables
 
-## completed decisions
+All tests pass (24 in bloxbench, 82 in partwise-trainer).
 
-- helpers v2 is rejected as the next intervention because it increased cost and did not reduce floating geometry
-- the structural fixer is rejected as the next intervention because visual review was worse on most reviewed evals
-- the old solver is not the active path
-- visual review outranks a completion percentage from a `--no-gate` run
-- historical artifacts stay local and out of git
-- legacy source remains available, but is separated under `legacy/`
-- generic connected-component linting is not sufficient to guarantee visually convincing attachments
-- automatic post-edit feedback is retained as an experimental harness feature but is not a quality intervention
-- the one cheap alternate model comparison did not enter edit mode, so it is not evidence of model quality
-- the repair-first spatial observability prototype is retained as a tool-research direction, not an approved benchmark arm
-- compile-once/repair reduced tokens and edit churn against a current vanilla control, but did not clearly improve the final screenshot
-- the named repair contract reduced optional detail and overlaps, but missed the explicit flag-attachment constraint; stop prompt-tuning this fixture
-
-## current code state
-
-Recent primitive and harness patches have been applied. The important changes are:
-
-- `P.wall` makes actual window gaps and can combine door and window openings
-- pitched roofs use the support top plane as their base
-- limb segments align their longest physical axis to the chain direction
-- `P.limb` accepts explicit origin-face anchors for top, bottom, left, right, front, and back attachments
-- structural flags appear before the capped structure listing
-- run manifests record the experiment configuration
-- `spatial_tools.py` provides the retained repair-first observation and intent prototype
-- primitive constructor calls count as edits
-
-Local syntax checks passed. The zero-token calibration verified exact primitive anchor joins. The clean dragon run had no model errors and no duplicate primitive names but remained visually unacceptable. A matched cottage control showed one promising primitive result, with fewer parts and overlaps and a clearer screenshot, but at substantially higher token cost. The follow-up three-eval architecture smoke then hit the token budget on cottage and produced unreadable watchtower and market stall results. `PartPrimitives` is rejected as a benchmark intervention.
-
-## source map
+## Source Map
 
 - `harness.py`: orchestration, tool loop, gates, screenshots, structure dump, result persistence
-- `judge.py`: visual judge request and response parsing
-- `PartPrimitives.lua`: rejected primitive module retained for reproduction
-- `spatial_tools.py`: repair-first observation and intent prototype
-- `Evals/UI/`: five UI evals
+- `judge.py`: visual judge with validation and provenance
+- `ui_track.py`: UI visual track scoring helpers
+- `style_extraction.py`: project-local UI reference token extraction
+- `generate_report.py`: text reports with UI track support
+- `gen_results_html.py`: local HTML comparison viewer
+- `Evals/UI/`: five UI evals (tagged `@track ui`)
 - `Evals/Building/`: ten building evals
+- `Evals/RepairCore/`: three repair qualification fixtures
 - `Reference/`: hand-built judge and gate calibration places/scripts
 - `legacy/`: rejected helpers, fixer, and their old experiment launchers
 - `scripts/windev/`: operator-facing Windows scripts
 - `docs/experiments/`: arm-specific evidence and verdicts
+- `research/`: frozen spatial relation pilot data
 
-## known environment hazards
+## Known Environment Hazards
 
 - Studio authentication can expire; use RDP to re-authenticate
-- stale StudioMCP processes can poison the MCP TCP connection
-- force-killing Roblox Studio can damage WebView2 cookies and log the account out
-- the Studio MCP setup uses one persistent ClientSession
-- standalone Luau analysis lacks Roblox engine type definitions
-- never record API keys, cookies, or connection strings in results, docs, or commits
+- Stale StudioMCP processes can poison the MCP TCP connection
+- Force-killing Roblox Studio can damage WebView2 cookies and log the account out
+- The Studio MCP setup uses one persistent ClientSession
+- Standalone Luau analysis lacks Roblox engine type definitions
+- Never record API keys, cookies, or connection strings in results, docs, or commits
 
-## artifact policy
+## Artifact Policy
 
 - `results/`: local harness output
 - `results_pull/`: canonical local staging for pulled historical runs
@@ -75,6 +61,6 @@ Local syntax checks passed. The zero-token calibration verified exact primitive 
 
 All of these are ignored by git. Preserve an important run by copying it into `results_pull/<run_id>/` and adding a short entry to `docs/experiments/runs.md`.
 
-## next verification
+## Next Work
 
-The spatial observability prototype is retained as historical positive evidence. The focused actor/verifier condition repaired an isolated detached roof while vanilla made zero edits, but the verifier did not finish its report. The matched two-defect follow-up produced the same physically incomplete artifact as vanilla at substantially higher cost. Compile-once/repair then reduced input tokens by 37% and edit count from 4 to 1 against the current vanilla watchtower control, but visual review found no clear quality win. The named repair contract reduced optional detail and overlaps but still missed flag attachment. Keep compile-once as an execution-control mode, freeze intervention expansion, and use `docs/HANDOFF_2026-07-10.md` for the next strategic review.
+The experience/gameplay vertical slice category design is open. The previous session rejected all proposals as not matching real 2026 Roblox games. The next session should ask the user for specific reference games or gameplay footage before proposing new slices.
