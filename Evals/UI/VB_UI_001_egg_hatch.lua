@@ -1,5 +1,7 @@
 --!strict
+-- @track ui
 -- @judge_rubric correctness="4 sections in right vertical order: title, egg, hatch, cancel" layout="centered, egg is focal point" aesthetics="buttons styled with colors and corners, not default gray" completeness="title + egg frame + hatch button + cancel button"
+-- @ui_visual_rubric hierarchy="the egg is the dominant focal element, hatch is primary and cancel is secondary" composition="title, egg, and actions form a stable centered vertical sequence without excessive dead space" spacing="title, egg, and action gaps are consistent and intentional" typography="title and action labels are legible with clear role-based scale" contrast="egg, primary action, and secondary action remain distinguishable" state_clarity="hatch and cancel affordances have unmistakable semantic priority" art_direction="the treatment supports an egg-hatching moment rather than a generic dark card"
 -- @screenshot type=ui angles=1
 
 local LoadedCode = game:FindFirstChild("LoadedCode")

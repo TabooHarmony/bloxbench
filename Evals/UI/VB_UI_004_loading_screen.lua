@@ -1,5 +1,7 @@
 --!strict
+-- @track ui
 -- @judge_rubric correctness="loading bar fill inside container, title at top, tip below bar" layout="bar centered horizontally, title above, tip below" aesthetics="dark background, bar styled with color and corners" completeness="title + bar container + fill + tip text"
+-- @ui_visual_rubric hierarchy="loading title and progress state are immediately understandable" composition="title, progress bar, and tip form a calm centered sequence" spacing="title, bar, and tip have deliberate breathing room" typography="loading message and tip remain legible without competing with progress" contrast="progress fill is clearly distinguishable from its track and background" state_clarity="the interface communicates that work is active and progress is measurable" art_direction="the loading treatment fits the experience context without unnecessary decoration"
 -- @screenshot type=ui angles=1
 
 local LoadedCode = game:FindFirstChild("LoadedCode")

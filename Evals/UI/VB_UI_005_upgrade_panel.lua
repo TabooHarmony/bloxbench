@@ -1,5 +1,7 @@
 --!strict
+-- @track ui
 -- @judge_rubric correctness="3 stat rows with label+level+button, prices on buttons" layout="vertical stack, consistent row sizing" aesthetics="rows styled with bg and corners, not default" completeness="title + 3 rows with upgrade buttons + close"
+-- @ui_visual_rubric hierarchy="panel title, upgradeable stats, prices, and close action have clear priority" composition="three rows form a coherent scan path with actions aligned consistently" spacing="row padding, labels, values, and buttons use repeatable relationships" typography="stat names, levels, prices, and actions are legible at a glance" contrast="upgrade controls and prices stand apart from row surfaces and background" state_clarity="available upgrade actions and their costs are unmistakable" art_direction="the panel communicates progression and improvement rather than generic settings"
 -- @screenshot type=ui angles=1
 
 local LoadedCode = game:FindFirstChild("LoadedCode")

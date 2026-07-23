@@ -1,5 +1,7 @@
 --!strict
+-- @track ui
 -- @judge_rubric correctness="two side-by-side panels with item slots, Accept/Cancel at bottom" layout="panels side by side, buttons centered below" aesthetics="container styled with dark bg and corners" completeness="header + 2 panels + item slots + coin display + buttons"
+-- @ui_visual_rubric hierarchy="trade header, both participants, offered items, and accept action have clear priority" composition="the two sides read as a balanced comparison with shared actions below" spacing="panel, slot, coin, and button spacing is symmetrical where comparison requires it" typography="participant, item, coin, and action text remain legible and scannable" contrast="the two sides, item slots, coin totals, and action states are distinguishable" state_clarity="accept, cancel, empty slots, and offer ownership are visually obvious" art_direction="the trade surface communicates exchange and trust rather than generic card decoration"
 -- @screenshot type=ui angles=1
 
 local LoadedCode = game:FindFirstChild("LoadedCode")

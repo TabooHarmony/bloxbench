@@ -1,5 +1,7 @@
 --!strict
+-- @track ui
 -- @judge_rubric correctness="7 slots in horizontal row, day 3 highlighted, days 1-2 dimmed" layout="centered container, slots aligned" aesthetics="styled container with corners, slot borders" completeness="title + 7 day slots + claim + close"
+-- @ui_visual_rubric hierarchy="current day and claim action are immediately dominant over completed and future days" composition="seven rewards read as one coherent progression without crowding or excessive empty space" spacing="slots, labels, and claim/close actions use consistent gaps and alignment" typography="day labels and reward text remain legible at the slot scale" contrast="current, completed, and future states are distinguishable without relying on color alone" state_clarity="day 3 active, days 1-2 completed, and future days are visually unambiguous" art_direction="the reward presentation feels celebratory and intentional rather than a generic row of boxes"
 -- @screenshot type=ui angles=1
 
 local LoadedCode = game:FindFirstChild("LoadedCode")
