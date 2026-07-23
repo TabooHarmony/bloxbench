@@ -7,15 +7,66 @@ Scores eval results that pass the structural gate by sending screenshots
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import os
+import struct
 from pathlib import Path
 from typing import Optional
 
 import aiohttp
 
 logger = logging.getLogger(__name__)
+
+JUDGE_PROMPT_VERSION = "ui-rubric-v2"
+
+
+def validate_score_result(result: dict, rubric: dict) -> dict:
+    """Validate a judge response before it becomes benchmark data."""
+    if not isinstance(result, dict):
+        raise ValueError("judge response must be a JSON object")
+
+    scores = result.get("scores")
+    if not isinstance(scores, dict):
+        raise ValueError("judge response scores must be an object")
+    expected_keys = set(rubric)
+    actual_keys = set(scores)
+    if actual_keys != expected_keys:
+        missing = sorted(expected_keys - actual_keys)
+        extra = sorted(actual_keys - expected_keys)
+        raise ValueError(f"judge score keys mismatch: missing={missing}, extra={extra}")
+
+    for dimension, score in scores.items():
+        if type(score) is not int or not 1 <= score <= 5:
+            raise ValueError(f"judge score for {dimension!r} must be an integer from 1 to 5")
+
+    overall = result.get("overall")
+    if type(overall) is not int or not 1 <= overall <= 5:
+        raise ValueError("judge overall must be an integer from 1 to 5")
+
+    if not isinstance(result.get("reasoning"), str):
+        raise ValueError("judge reasoning must be a string")
+
+    issues = result.get("issues")
+    if not isinstance(issues, list) or not all(isinstance(issue, str) for issue in issues):
+        raise ValueError("judge issues must be an array of strings")
+
+    return result
+
+
+def _file_provenance(path: str) -> dict:
+    data = Path(path).read_bytes()
+    metadata = {
+        "path": path,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "dimensions": None,
+    }
+    # Roblox screenshot capture currently writes PNG files. Keep this parser
+    # dependency-free and leave dimensions unknown for other image formats.
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24:
+        metadata["dimensions"] = list(struct.unpack(">II", data[16:24]))
+    return metadata
 
 
 class VisualJudge:
@@ -25,6 +76,7 @@ class VisualJudge:
         self.model = model
         self.api_base = api_base.rstrip("/")
         self.api_key = api_key
+        self.last_attempt_count = 0
 
     def _encode_image(self, path: str) -> str:
         """Read an image file and return base64 encoded string."""
@@ -43,6 +95,9 @@ class VisualJudge:
         rubric_text = "\n".join(
             f"- {dim}: {desc}" for dim, desc in rubric.items()
         )
+        score_dimensions = ", ".join(
+            f"{json.dumps(dim)}: N" for dim in rubric
+        )
 
         instruction = f"""You are judging a Roblox Studio agent's work. The agent was asked to:
 
@@ -57,8 +112,17 @@ Screenshots of the result are attached."""
 
         instruction += """
 
+Evidence rules:
+- Score visible visual properties from the screenshots.
+- Use the structural description only to identify elements or disambiguate labels.
+- Do not infer optical quality, responsiveness, focus order, input usability, localization behavior, or interaction quality from structure alone.
+- If a requested property is not evidenced by the supplied material, mention that limitation in issues instead of assuming it is present.
+"""
+
+        instruction += f"""
+
 Respond ONLY with valid JSON in this exact format:
-{"scores": {"correctness": N, "layout": N, "aesthetics": N, "completeness": N}, "overall": N, "reasoning": "brief explanation", "issues": ["specific problem 1", "specific problem 2"]}
+{{"scores": {{{score_dimensions}}}, "overall": N, "reasoning": "brief explanation", "issues": ["specific problem 1", "specific problem 2"]}}
 
 Where N is an integer 1-5. The "overall" should be your holistic assessment."""
 
@@ -91,7 +155,9 @@ Where N is an integer 1-5. The "overall" should be your holistic assessment."""
         }
 
         last_error = None
+        self.last_attempt_count = 0
         for attempt in range(3):
+            self.last_attempt_count = attempt + 1
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
@@ -161,5 +227,26 @@ Where N is an integer 1-5. The "overall" should be your holistic assessment."""
             task_prompt, rubric, screenshots, structure_dump
         )
         result = await self._call_vision_api(messages)
+        validate_score_result(result, rubric)
+
+        prompt_text = messages[0]["content"][0]["text"]
+        result["_provenance"] = {
+            "validation_status": "valid",
+            "score_source": "validated_judge_overall",
+            "judge_model": self.model,
+            "judge_api_base": self.api_base,
+            "judge_attempt_count": self.last_attempt_count,
+            "prompt_version": JUDGE_PROMPT_VERSION,
+            "prompt_sha256": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
+            "rubric_sha256": hashlib.sha256(
+                json.dumps(rubric, sort_keys=True).encode("utf-8")
+            ).hexdigest(),
+            "screenshots": [
+                _file_provenance(path) for path in screenshots if os.path.exists(path)
+            ],
+            "structure_dump_sha256": hashlib.sha256(
+                structure_dump.encode("utf-8")
+            ).hexdigest() if structure_dump else None,
+        }
         logger.info(f"Judge scored: overall={result.get('overall', '?')}")
         return result
