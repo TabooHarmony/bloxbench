@@ -14,6 +14,7 @@ Supports skills injection for benchmarking LLMs with/without context.
 
 import asyncio
 import base64
+import hashlib
 import json
 import time
 import os
@@ -45,6 +46,8 @@ from mcp import ClientSession
 import aiohttp
 from dotenv import load_dotenv
 from spatial_tools import SpatialTooling
+from style_extraction import extract_style_profile, style_profile_prompt
+from ui_track import aggregate_ui_results, default_ui_visual_rubric
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -64,9 +67,54 @@ def fmt_time(ms: int) -> str:
     return f"{h:.1f}h"
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def load_style_reference_context(paths: list[str]) -> tuple[dict, str]:
+    """Load UI reference observations for optional model-side context."""
+    profile = extract_style_profile(paths)
+    return profile, style_profile_prompt(profile)
+
+
+def build_source_provenance(repo_root: Path, harness_path: Path, eval_files: list[Path]) -> dict:
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip())
+    except (OSError, subprocess.CalledProcessError):
+        commit = None
+        dirty = None
+
+    return {
+        "git_commit": commit,
+        "git_dirty": dirty,
+        "harness_sha256": sha256_file(harness_path),
+        "evals": {
+            str(path.resolve().relative_to(repo_root.resolve())): sha256_file(path)
+            for path in sorted(eval_files)
+        },
+    }
+
+
+# ════════════════════════════════════════════════════════════
 # Config
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 @dataclass
 class ModelConfig:
@@ -86,6 +134,7 @@ class StudioConfig:
 class RunConfig:
     evals_dir: str
     places_dir: str
+    track: str = "all"
     max_tool_rounds: int = 25
     pass_n: int = 1
     output_dir: str = "results"
@@ -113,11 +162,13 @@ class RunConfig:
     compile_once_repair: bool = False  # one script-first edit plus one bounded correction pass
     repair_contract: bool = False  # inject compact named task invariants
     existing_scene: bool = False  # eval setup provides a scene to inspect or repair
+    style_profile_text: Optional[str] = None  # project-local UI reference observations
+    style_profile: Optional[dict] = None  # extracted profile for provenance
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 # Skill Loader
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 class SkillLoader:
     """Serves skill content on demand via the skill_view tool."""
@@ -166,9 +217,9 @@ class SkillLoader:
         }
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 # Eval Parser
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 @dataclass
 class EvalFile:
@@ -177,7 +228,9 @@ class EvalFile:
     prompt_text: str
     place: str
     script: str
+    track: str = "generic"
     judge_rubric: dict = field(default_factory=dict)
+    ui_visual_rubric: dict = field(default_factory=dict)
     screenshot_type: str = ""
     screenshot_angles: int = 1
     screenshot_primary: str = "front"
@@ -190,17 +243,33 @@ def parse_eval(path: str) -> EvalFile:
     name_m = re.search(r'scenario_name\s*=\s*"([^"]+)"', content)
     place_m = re.search(r'place\s*=\s*"([^"]+)"', content)
 
-    # prompt can be [[multi-line]] or "single-line"
+    # prompt can be [[multi-line]] or "single-line". RepairCore fixtures
+    # also use the lightweight eval.prompt = [[...]] form.
     prompt_m = re.search(r'content\s*=\s*\[\[(.+?)\]\]', content, re.DOTALL)
     if not prompt_m:
         prompt_m = re.search(r'content\s*=\s*"([^"]+)"', content)
+    if not prompt_m:
+        prompt_m = re.search(r'eval\.prompt\s*=\s*\[\[(.+?)\]\]', content, re.DOTALL)
+    if not prompt_m:
+        prompt_m = re.search(r'eval\.prompt\s*=\s*"([^"]+)"', content)
 
-    # Parse judge rubric from comments
+    # Parse track and judge rubrics from comments
+    track_m = re.search(r'--\s*@track\s+([\w-]+)', content)
+    track = track_m.group(1) if track_m else "generic"
+
     rubric = {}
     rubric_m = re.search(r'--\s*@judge_rubric\s+(.*)', content)
     if rubric_m:
         for match in re.finditer(r'(\w+)="([^"]*)"', rubric_m.group(1)):
             rubric[match.group(1)] = match.group(2)
+
+    ui_visual_rubric = {}
+    visual_rubric_m = re.search(r'--\s*@ui_visual_rubric\s+(.*)', content)
+    if visual_rubric_m:
+        for match in re.finditer(r'(\w+)="([^"]*)"', visual_rubric_m.group(1)):
+            ui_visual_rubric[match.group(1)] = match.group(2)
+    if track == "ui" and not ui_visual_rubric:
+        ui_visual_rubric = default_ui_visual_rubric()
 
     # Parse screenshot config
     ss_type = ""
@@ -227,7 +296,9 @@ def parse_eval(path: str) -> EvalFile:
         prompt_text=prompt_m.group(1).strip() if prompt_m else "",
         place=place_m.group(1) if place_m else "",
         script=content,
+        track=track,
         judge_rubric=rubric,
+        ui_visual_rubric=ui_visual_rubric,
         screenshot_type=ss_type,
         screenshot_angles=ss_angles,
         screenshot_primary=ss_primary,
@@ -235,15 +306,17 @@ def parse_eval(path: str) -> EvalFile:
     )
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+
+# ════════════════════════════════════════════════════════════
 # Metrics
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+
 
 @dataclass
 class EvalMetrics:
     scenario: str = ""
     place: str = ""
     passed: bool = False
+    review_required: bool = False
     passed_cons: bool = False   # Cons@5: >=3/5 passes
     passed_all: bool = False    # All@5: 5/5 passes
     scene_passed: Optional[bool] = None
@@ -272,8 +345,14 @@ class EvalMetrics:
     harness_tool_errors_by_type: dict = field(default_factory=dict)
     judge_scores: Optional[dict] = None
     judge_overall: Optional[int] = None
+    derived_dimension_mean: Optional[float] = None
     judge_reasoning: Optional[str] = None
     judge_issues: list = field(default_factory=list)
+    visual_score: Optional[float] = None
+    visual_passed: Optional[bool] = None
+    visual_score_source: Optional[str] = None
+    judge_validation_status: Optional[str] = None
+    judge_provenance: Optional[dict] = None
     screenshot_paths: list = field(default_factory=list)
     structure_dump: Optional[str] = None
     created_scripts: dict = field(default_factory=dict)  # name -> source code
@@ -287,9 +366,9 @@ class EvalMetrics:
     repair_rounds: int = 0
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 # LLM Bridge
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 def mcp_tools_to_openai(tools) -> list:
     """Convert MCP tool definitions to OpenAI function calling format."""
@@ -379,10 +458,10 @@ async def llm_chat(
     raise last_error or RuntimeError("LLM call failed after all retries")
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 # Error Categorization
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 def describe_exception(exc: BaseException) -> str:
     """Flatten nested ExceptionGroup/TaskGroup errors for actionable logs."""
@@ -435,9 +514,9 @@ def categorize_error(error_text: str) -> str:
     return "harness_error"
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 # Studio Lifecycle
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 async def launch_studio(studio: StudioConfig, place_path: str) -> bool:
     """Launch Studio on the interactive desktop via schtasks.
@@ -496,7 +575,7 @@ async def launch_studio(studio: StudioConfig, place_path: str) -> bool:
     await asyncio.sleep(studio.startup_wait)
     return True
 
-# WebView2 cookie protection �?" force-killing Studio can corrupt the SQLite
+# ════════════════════════════════════════════════════════════
 # cookie database, causing Studio to lose auth on next launch.
 _COOKIES_DIR = os.path.join(
     os.environ.get("LOCALAPPDATA", r"C:\Users\Admin\AppData\Local"),
@@ -544,7 +623,7 @@ def kill_studio(_unused=None):
     """Kill all Roblox/Studio processes and wait until they're actually gone.
 
     Cookie backup/restore (called in launch_studio) handles auth persistence.
-    Must kill StudioMCP and CrashHandler too �?" they can hold locks on resources.
+# ════════════════════════════════════════════════════════════
     """
     for proc_name in ("StudioMCP.exe", "RobloxStudioBeta.exe", "RobloxCrashHandler.exe"):
         subprocess.run(
@@ -568,9 +647,9 @@ def kill_studio(_unused=None):
     time.sleep(2)
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 # Eval Runner
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 # EvalUtils module implementations (reverse-engineered from eval script usage)
 # Loaded from evalutils/ directory at startup
@@ -667,7 +746,7 @@ print("[bridge] script started")
 task.wait(2)  -- brief settle instead of blocking game.Loaded:Wait()
 print("[bridge] after settle")
 
--- Wait for player �?" try multiple methods
+# ════════════════════════════════════════════════════════════
 local player = nil
 if #Players:GetPlayers() > 0 then
     player = Players:GetPlayers()[1]
@@ -1095,7 +1174,7 @@ async def _run_single_eval_inner(
         # Snapshot cookies while Studio is alive (auth is freshly loaded)
         backup_cookies()
 
-        # 2. Connect MCP (with timeout on initialize �?" StudioMCP can hang if Studio isn't ready)
+# ════════════════════════════════════════════════════════════
         server_params = StdioServerParameters(
             command="cmd.exe",
             args=["/c", studio.mcp_path],
@@ -1216,7 +1295,7 @@ return "primitives_uploaded"
                     )
                     logger.info(f"[{ev.scenario_name}] PartPrimitives module uploaded: {primitives_text[:60]}")
 
-                # 5. Run eval setup (via ModuleScript �?" loadstring unavailable at plugin identity)
+# ════════════════════════════════════════════════════════════
                 setup_lua = f"""
 local evalMod = Instance.new("ModuleScript")
 evalMod.Name = "_HarnessEvalSetup"
@@ -1426,6 +1505,8 @@ return "ok"
                     )
                 if run.protocol_text:
                     LUAU_SYSTEM_PROMPT += "\\n\\n## Model-side construction protocol\\n\\n" + run.protocol_text
+                if ev.track == "ui" and run.style_profile_text:
+                    LUAU_SYSTEM_PROMPT += "\\n\\n" + run.style_profile_text
                 messages.append({"role": "system", "content": LUAU_SYSTEM_PROMPT})
                 actor_prompt = ev.prompt_text
                 if run.actor_verifier:
@@ -1860,9 +1941,10 @@ if cok then return "true|pass" else return "false|" .. tostring(cerr) end
                             m.game_passed = False
                             m.error = f"Play mode error: {str(e) or type(e).__name__}"
 
-                # In --no-gate mode, passed = True (everything captured for human review)
+                # In --no-gate mode, the result is unjudged and requires review.
                 if run.no_gate:
-                    m.passed = True
+                    m.review_required = True
+                    m.passed = False
                 else:
                     m.passed = (m.scene_passed is True) and (m.game_passed is not False)
 
@@ -2160,7 +2242,8 @@ return tostring(count) .. "|" .. result
                         logger.warning(f"  Script capture failed: {e}")
 
                 # 11e. Judge scoring — ONLY for gate-passed evals
-                if m.scene_passed is not False and run.judge_enabled and run.judge and ev.judge_rubric:
+                judge_rubric = ev.ui_visual_rubric or ev.judge_rubric
+                if m.scene_passed is not False and run.judge_enabled and run.judge and judge_rubric:
                     if m.screenshot_paths:
                         try:
                             primary_idx = {"front": 0, "side": 1, "top": 2}.get(ev.screenshot_primary, 0)
@@ -2170,17 +2253,35 @@ return tostring(count) .. "|" .. result
                                 judge_screenshots = m.screenshot_paths[:1]
                             judge_result = await run.judge.score(
                                 task_prompt=ev.prompt_text,
-                                rubric=ev.judge_rubric,
+                                rubric=judge_rubric,
                                 screenshots=judge_screenshots,
                                 structure_dump=m.structure_dump or "",
                             )
                             m.judge_scores = judge_result.get("scores", {})
+                            numeric_scores = [
+                                float(value) for value in (m.judge_scores or {}).values()
+                                if isinstance(value, (int, float)) and not isinstance(value, bool)
+                            ]
+                            m.derived_dimension_mean = (
+                                round(sum(numeric_scores) / len(numeric_scores), 2)
+                                if numeric_scores else None
+                            )
                             m.judge_overall = judge_result.get("overall")
                             m.judge_reasoning = judge_result.get("reasoning", "")
                             m.judge_issues = judge_result.get("issues", [])
+                            m.judge_provenance = judge_result.get("_provenance")
+                            m.judge_validation_status = "valid"
+                            if ev.ui_visual_rubric and isinstance(m.judge_overall, (int, float)):
+                                m.visual_score = float(m.judge_overall)
+                                m.visual_score_source = "validated_judge_overall"
+                                m.visual_passed = m.visual_score >= 3.0
                             logger.info(f"  Judge: overall={m.judge_overall} scores={m.judge_scores}")
+                        except ValueError as e:
+                            m.judge_validation_status = "invalid"
+                            logger.warning(f"Judge response validation failed: {e}")
                         except Exception as e:
-                            logger.warning(f"  Judge scoring failed: {e}")
+                            m.judge_validation_status = "error"
+                            logger.warning(f"Judge scoring failed: {e}")
 
     except asyncio.TimeoutError:
         m.error = f"Eval timed out after {run.eval_timeout}s"
@@ -2230,9 +2331,9 @@ async def run_single_eval(
         return m
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 # Aggregation
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 
 def _compute_tool_error_rates(results) -> dict:
@@ -2252,6 +2353,8 @@ def _compute_tool_error_rates(results) -> dict:
 def aggregate_results(results: list[EvalMetrics], pass_n: int = 1) -> dict:
     total = len(results)
     passed = sum(1 for r in results if r.passed)
+    review_required = sum(1 for r in results if r.review_required)
+    scored = total - review_required
     errors = sum(1 for r in results if r.error and "Fatal" in (r.error or ""))
     tool_errors = sum(r.tool_errors for r in results)
     total_tool_calls = sum(r.tool_calls for r in results)
@@ -2265,7 +2368,9 @@ def aggregate_results(results: list[EvalMetrics], pass_n: int = 1) -> dict:
     summary = {
         "total_evals": total,
         "passed": passed,
-        "pass_rate": round(passed / total * 100, 2) if total else 0,
+        "review_required": review_required,
+        "scored_evals": scored,
+        "pass_rate": round(passed / scored * 100, 2) if scored else None,
         "fatal_errors": errors,
         "tool_error_rate": round(tool_errors / total_tool_calls * 100, 2) if total_tool_calls else 0,
         "tool_errors_by_type": _compute_tool_error_rates(results),
@@ -2305,20 +2410,21 @@ def aggregate_results(results: list[EvalMetrics], pass_n: int = 1) -> dict:
             summary["harness_tool_errors_by_type"][name] = round(te / tc * 100, 2) if tc > 0 else 0
 
     if pass_n == 5:
-        summary["pass_at_5"] = round(passed / total * 100, 2) if total else 0  # >=1/5
-        summary["cons_at_5"] = round(sum(1 for r in results if r.passed_cons) / total * 100, 2) if total else 0  # >=3/5
-        summary["all_at_5"] = round(sum(1 for r in results if r.passed_all) / total * 100, 2) if total else 0  # 5/5
+        summary["pass_at_5"] = round(passed / scored * 100, 2) if scored else None  # >=1/5
+        summary["cons_at_5"] = round(sum(1 for r in results if r.passed_cons) / scored * 100, 2) if scored else None  # >=3/5
+        summary["all_at_5"] = round(sum(1 for r in results if r.passed_all) / scored * 100, 2) if scored else None  # 5/5
 
     return summary
 
 
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 # CLI
-# �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+# ════════════════════════════════════════════════════════════
 
 def parse_args():
     p = argparse.ArgumentParser(description="OpenGameEval Local Harness")
     p.add_argument("--evals-dir", required=True, help="Path to Evals/ directory")
+    p.add_argument("--track", choices=["all", "ui"], default="all", help="Eval track to run (default: all)")
     p.add_argument("--debug-evals-dir", default=None, help="Path to DebugEvals/ directory (optional, for debug benchmark)")
     p.add_argument("--judge", action="store_true", default=False, help="Enable visual judge scoring")
     p.add_argument("--judge-model", default=None, help="Judge model name (default: JUDGE_MODEL env)")
@@ -2355,6 +2461,7 @@ def parse_args():
     p.add_argument("--compile-once-repair", action="store_true", help="Run one script-first edit and one bounded correction pass")
     p.add_argument("--repair-contract", action="store_true", help="Inject a compact named repair contract into the task prompt")
     p.add_argument("--existing-scene", action="store_true", help="Tell the model the eval setup provides an existing scene to inspect or repair")
+    p.add_argument("--style-reference", action="append", default=[], help="Known-good UI reference Lua file; repeat for multiple references")
     p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
     p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
     return p.parse_args()
@@ -2378,6 +2485,21 @@ async def main():
     if not api_key:
         print("Error: --api-key or LLM_API_KEY env required")
         sys.exit(1)
+
+    style_references = [str(Path(raw).resolve()) for raw in args.style_reference]
+    for reference in style_references:
+        if not Path(reference).is_file():
+            print(f"Error: style reference not found: {reference}")
+            sys.exit(1)
+    style_profile = None
+    style_profile_text = None
+    if style_references:
+        try:
+            style_profile, style_profile_text = load_style_reference_context(style_references)
+        except (OSError, UnicodeError, ValueError) as exc:
+            print(f"Error: could not extract style references: {exc}")
+            sys.exit(1)
+        logger.info(f"Loaded {len(style_references)} UI style references")
 
     # Load skills mode
     skill_loader = None
@@ -2446,6 +2568,7 @@ async def main():
     run = RunConfig(
         evals_dir=args.evals_dir,
         places_dir=args.places_dir,
+        track=args.track,
         max_tool_rounds=args.max_rounds,
         pass_n=args.pass_n,
         output_dir=args.output_dir,
@@ -2467,6 +2590,8 @@ async def main():
         compile_once_repair=args.compile_once_repair,
         repair_contract=args.repair_contract,
         existing_scene=args.existing_scene,
+        style_profile_text=style_profile_text,
+        style_profile=style_profile,
     )
 
     # Fixer mode: load StructuralFixer.lua
@@ -2539,6 +2664,10 @@ async def main():
         mode = "compile_once"
     else:
         mode = "vanilla"
+    if args.track != "all":
+        mode = f"{args.track}_{mode}"
+    if style_references:
+        mode += "_style"
     if args.fixer:
         mode += "_fixer"
     if args.existing_scene:
@@ -2553,6 +2682,7 @@ async def main():
     logger.info(f"Run directory: {run_dir}")
 
     run_config = {
+        "track": run.track,
         "pass_n": run.pass_n,
         "max_rounds": run.max_tool_rounds,
         "eval_timeout": run.eval_timeout,
@@ -2570,6 +2700,10 @@ async def main():
         "compile_once_repair": args.compile_once_repair,
         "repair_contract": args.repair_contract,
         "existing_scene": args.existing_scene,
+        "style_references": style_references,
+        "style_profile_sha256": hashlib.sha256(
+            json.dumps(style_profile, sort_keys=True).encode("utf-8")
+        ).hexdigest() if style_profile else None,
         "solver": solver_enabled,
         "fixer": args.fixer,
         "eval_filter": args.eval_filter,
@@ -2585,10 +2719,15 @@ async def main():
 
     evals = [parse_eval(str(f)) for f in eval_files]
 
-    # Apply filter
+    # Apply track and scenario filters
+    if args.track != "all":
+        evals = [e for e in evals if e.track == args.track]
     if args.eval_filter:
         pattern = re.compile(args.eval_filter)
         evals = [e for e in evals if pattern.search(e.scenario_name)]
+    if not evals:
+        print(f"No evals matched track={args.track!r} filter={args.eval_filter!r}")
+        sys.exit(1)
 
     logger.info(f"Loaded {len(evals)} evals")
 
@@ -2596,6 +2735,11 @@ async def main():
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     # Save run manifest
+    if style_profile:
+        Path(run_dir, "style_profile.json").write_text(
+            json.dumps(style_profile, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     manifest = {
         "run_id": run_id,
         "model": model.name,
@@ -2624,13 +2768,26 @@ async def main():
         manifest["skills_mode"] = "compile_once"
     elif args.repair_contract:
         manifest["skills_mode"] = "repair_contract"
+    elif style_references:
+        manifest["skills_mode"] = "style_reference"
     else:
         manifest["skills_mode"] = "vanilla"
     if judge_enabled:
         manifest["judge_enabled"] = True
         manifest["judge_model"] = args.judge_model or os.getenv("JUDGE_MODEL", "")
+    manifest["source_provenance"] = build_source_provenance(
+        Path(__file__).resolve().parent,
+        Path(__file__).resolve(),
+        [Path(ev.path) for ev in evals],
+    )
     manifest_path = Path(run_dir) / "run_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    def build_summary(results):
+        summary = aggregate_results(results, run.pass_n)
+        if args.track == "ui":
+            summary["ui_track"] = aggregate_ui_results(results)
+        return summary
 
     # Helper: run a set of evals
     async def run_eval_set(evals_list, label):
@@ -2664,7 +2821,10 @@ async def main():
                     run_results[-1] = retry_result
                     result = retry_result
 
-                status = "PASS" if result.passed else "FAIL"
+                if result.review_required:
+                    status = "REVIEW"
+                else:
+                    status = "PASS" if result.passed else "FAIL"
                 skills_tag = f" skills={result.skills_used}" if result.skills_used else ""
                 logger.info(
                     f"  {status} | tokens_in={result.total_tokens_in} "
@@ -2690,7 +2850,7 @@ async def main():
 
             # Incremental save: write results.json after each eval
             try:
-                inc_summary = aggregate_results(results, run.pass_n)
+                inc_summary = build_summary(results)
                 inc_output = {
                     "summary": inc_summary,
                     "model": {"name": model.name, "api_base": model.api_base},
@@ -2715,6 +2875,8 @@ async def main():
         debug_files = sorted(debug_dir.glob("*.lua"))
         if debug_files:
             debug_evals = [parse_eval(str(f)) for f in debug_files]
+            if args.track != "all":
+                debug_evals = [e for e in debug_evals if e.track == args.track]
             if args.eval_filter:
                 pattern = re.compile(args.eval_filter)
                 debug_evals = [e for e in debug_evals if pattern.search(e.scenario_name)]
@@ -2723,7 +2885,7 @@ async def main():
 
     # Save results
     results_path = Path(run_dir) / "results.json"
-    summary = aggregate_results(all_results, run.pass_n)
+    summary = build_summary(all_results)
     output = {
         "summary": summary,
         "model": {"name": model.name, "api_base": model.api_base},
@@ -2734,7 +2896,7 @@ async def main():
 
     debug_summary = None
     if debug_results:
-        debug_summary = aggregate_results(debug_results, run.pass_n)
+        debug_summary = build_summary(debug_results)
         output["debug_summary"] = debug_summary
         output["debug_evals"] = [asdict(r) for r in debug_results]
 
@@ -2745,12 +2907,34 @@ async def main():
     def print_summary(label, summ, pass_n):
         print(f"\n  [{label}]")
         if pass_n == 5:
-            print(f"    Pass@1: {summ['pass_rate']}% ({summ['passed']}/{summ['total_evals']})")
-            print(f"    Pass@5: {summ['pass_at_5']}%")
-            print(f"    Cons@5: {summ['cons_at_5']}%")
-            print(f"    All@5:  {summ['all_at_5']}%")
+            if summ["pass_rate"] is None:
+                print(f"    Pass@1: REVIEW REQUIRED ({summ['passed']}/{summ['total_evals']})")
+            else:
+                print(f"    Pass@1: {summ['pass_rate']}% ({summ['passed']}/{summ['total_evals']})")
+            if summ["pass_rate"] is None:
+                print("    Pass@5: REVIEW REQUIRED")
+                print("    Cons@5: REVIEW REQUIRED")
+                print("    All@5:  REVIEW REQUIRED")
+            else:
+                print(f"    Pass@5: {summ['pass_at_5']}%")
+                print(f"    Cons@5: {summ['cons_at_5']}%")
+                print(f"    All@5:  {summ['all_at_5']}%")
         else:
-            print(f"    PASS RATE: {summ['pass_rate']}% ({summ['passed']}/{summ['total_evals']})")
+            if summ["pass_rate"] is None:
+                print(f"    PASS RATE: REVIEW REQUIRED ({summ['passed']}/{summ['total_evals']})")
+            else:
+                print(f"    PASS RATE: {summ['pass_rate']}% ({summ['passed']}/{summ['total_evals']})")
+        if summ.get("review_required", 0):
+            print(f"    REVIEW REQUIRED: {summ['review_required']}")
+        ui_summary = summ.get("ui_track")
+        if ui_summary:
+            print(f"    UI FUNCTIONAL: {ui_summary['functional_pass_rate']}% ({ui_summary['functional_passed']}/{ui_summary['functional_scored_evals']})")
+            print(f"    UI CONDITIONAL VISUAL: {ui_summary.get('conditional_visual_pass_rate', ui_summary['visual_pass_rate'])}% ({ui_summary['visual_passed']}/{ui_summary['visual_scored_evals']})")
+            print(f"    UI VISUAL EVIDENCE: {ui_summary.get('visual_evidence_coverage')}% of functional passes")
+            print(f"    UI CONFIRMED COMBINED: {ui_summary.get('confirmed_combined_pass_rate', ui_summary['combined_pass_rate'])}% ({ui_summary.get('confirmed_combined_passed', ui_summary['combined_passed'])}/{ui_summary.get('confirmed_combined_scored_evals', ui_summary['combined_scored_evals'])})")
+            print(f"    UI COMBINED BOUNDS: {ui_summary.get('combined_pass_rate_lower_bound')}%-{ui_summary.get('combined_pass_rate_upper_bound')}%")
+            if ui_summary["visual_review_required"]:
+                print(f"    UI VISUAL REVIEW REQUIRED: {ui_summary['visual_review_required']}")
         print(f"    AVG ROUNDS: {summ['avg_llm_calls']}  AVG TOKENS: in={summ['avg_tokens_in']} out={summ['avg_tokens_out']}")
         print(f"    AVG EDITS: {summ['avg_edit_count']}  AVG PEAK CTX: {summ['avg_max_context_tokens']} tokens")
         print(f"    AVG LATENCY: {fmt_time(summ['avg_latency_ms'])}")
