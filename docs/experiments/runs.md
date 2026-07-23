@@ -39,6 +39,15 @@ This is a compact index only. Full artifacts remain local under `results_pull/` 
 - `compile_once_repair_contract_0710_1126`: named repair-contract condition; artifacts: `results_pull/compile_once_repair_contract_0710_1126/`; 1 edit, 132,700 input tokens, fewer overlaps and less optional detail, but flag attachment still failed; no quality promotion
 - `vanilla_repair_0709_2228`: one cheap `cline-pass/minimax-m3` model comparison; artifacts: `results_pull/vanilla_repair_0709_2228/`; model inspected but made zero edits, so no quality comparison was possible
 
+- `vanilla_repair_0710_1807`: RepairCore vanilla baseline, `cline-pass/deepseek-v4-flash`, three qualified RepairCore evals, 2026-07-10; artifacts: `results_pull/vanilla_repair_0710_1807/`; verdict: 3/3 machine-gate passes and 3/3 screenshots visually agree, with one harness-side Studio readiness retry per eval; no intervention comparison yet
+- `vanilla_repair_0710_1905`: raw arm of the relation-context pilot, same model and two harder Building repair evals; artifacts: `results_pull/spatial_relation_raw_0710_1905/`; verdict: 2/2 weak-gate passes, but watchtower overbuilt to 57 parts with 17 generic floating flags and 55 overlaps
+- `relations_repair_0710_1901`: relation-context arm of the same pilot; artifacts: `results_pull/spatial_relation_context_0710_1901/`; verdict: 2/2 weak-gate passes, watchtower reduced to 29 parts with 1 generic floating flag and 9 overlaps, visually cleaner but flag attachment remained unresolved; promising, not promoted
+
+- `relations_commitment_repair_0710_1929`: relation context plus structured pre-edit commitment on the two-task follow-up; artifacts: `results_pull/spatial_relation_commitment_0710_1929/`; verdict: 2/2 official passes, strict relation 2/2, watchtower reduced to 10 parts and 2 overlaps but changed existing material/rebuilt the rim, so commitment is conditional and not promoted
+- `vanilla_repair_0710_1940`: raw arm of the third-layout generalization, `VB_REPAIR_002_roof_attachment`; artifacts: `results_pull/spatial_generalization_raw_0710_1940/`; verdict: 1/1 official pass, 99,282 input tokens, 3,251 output tokens, 33.1s latency
+- `relations_repair_0710_1941`: relation-context arm of the third-layout generalization; artifacts: `results_pull/spatial_generalization_relation_0710_1941/`; verdict: 1/1 official pass, same 16-part artifact as raw, 92,480 input tokens, 1,841 output tokens, 22.1s latency; relation context retained its efficiency signal
+- `relations_commitment_repair_0710_1943`: relation context plus structured commitment on the third layout; artifacts: `results_pull/spatial_generalization_commitment_0710_1943/`; verdict: 1/1 official pass, same artifact as raw/relation, 146,157 input tokens, 2,624 output tokens, 45.2s latency; commitment cost more without improving the result
+
 ## required entry format
 
 For future runs, add:
