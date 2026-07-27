@@ -188,9 +188,10 @@ html += '</div>\n'
 # Summary cards (metrics only, no pass/fail)
 html += '<div class="summary">\n'
 for cls, run_name, summ in [("left", LEFT_RUN, left["data"].get("summary", {})), ("right", RIGHT_RUN, right["data"].get("summary", {}))]:
+    run_data = ALL_RUNS.get(run_name, {}).get("data", {})
     html += f'<div class="summary-card {cls}"><h3>{escape(run_name)}</h3>'
-    html += f'<div class="metric"><span class="metric-label">Model</span><span class="metric-value">{escape(str(summ.get("model","?")))}</span></div>'
-    html += f'<div class="metric"><span class="metric-label">Skills Mode</span><span class="metric-value">{escape(str(summ.get("skills_mode","?")))}</span></div>'
+    html += f'<div class="metric"><span class="metric-label">Model</span><span class="metric-value">{escape(str(run_data.get("model",{}).get("name","?")))}</span></div>'
+    html += f'<div class="metric"><span class="metric-label">Mode</span><span class="metric-value">{escape(str(run_data.get("mode","?")))}</span></div>'
     html += f'<div class="metric"><span class="metric-label">Avg Rounds</span><span class="metric-value">{summ.get("avg_llm_calls","?")}</span></div>'
     html += f'<div class="metric"><span class="metric-label">Avg Tokens In</span><span class="metric-value">{fmt_tokens(summ.get("avg_tokens_in"))}</span></div>'
     html += f'<div class="metric"><span class="metric-label">Avg Tokens Out</span><span class="metric-value">{fmt_tokens(summ.get("avg_tokens_out"))}</span></div>'
@@ -202,7 +203,7 @@ html += '</div>\n'
 # Nav
 html += '<div class="nav">\n'
 for sc in all_scenarios:
-    short = sc.replace("VB_BUILD_","").replace("VB_UI_","UI:")
+    short = sc.replace("VB_BUILD_","").replace("VB_UI_","UI:").replace("VB_GAMEPLAY_","GP:")
     html += f'<a class="nav-item" href="#{sc}">{short}</a>\n'
 html += '</div>\n'
 
@@ -210,7 +211,7 @@ html += '</div>\n'
 for sc in all_scenarios:
     l = left_evals.get(sc,{})
     r = right_evals.get(sc,{})
-    short = sc.replace("VB_BUILD_","").replace("VB_UI_","UI:")
+    short = sc.replace("VB_BUILD_","").replace("VB_UI_","UI:").replace("VB_GAMEPLAY_","GP:")
     prompt = EVAL_PROMPTS.get(sc, "")
     html += f'<div class="eval-section" id="{sc}">\n'
     html += f'<div class="eval-header"><span class="eval-name">{short}</span></div>\n'
