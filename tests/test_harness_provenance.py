@@ -5,11 +5,9 @@ from pathlib import Path
 
 from harness import (
     build_source_provenance,
-    load_style_reference_context,
     parse_eval,
     sha256_file,
 )
-from scripts.windev.repair_core_qualification import REPAIR_SNIPPETS, discover_repair_core_evals
 
 
 class ProvenanceTests(unittest.TestCase):
@@ -49,40 +47,34 @@ class ProvenanceTests(unittest.TestCase):
             self.assertIsNone(provenance["git_commit"])
             self.assertIsNone(provenance["git_dirty"])
 
-    def test_repair_core_has_exactly_three_evals(self):
-        paths = discover_repair_core_evals()
-        self.assertEqual(len(paths), 3)
-        self.assertEqual({path.stem for path in paths}, set(REPAIR_SNIPPETS))
 
-    def test_each_scenario_has_one_repair_snippet(self):
-        paths = discover_repair_core_evals()
-        self.assertEqual({path.stem for path in paths}, set(REPAIR_SNIPPETS))
-        self.assertEqual(len(REPAIR_SNIPPETS), 3)
-        self.assertTrue(all(REPAIR_SNIPPETS[path.stem].strip() for path in paths))
+class FixtureParseTests(unittest.TestCase):
+    """Verify all active eval fixtures parse correctly."""
 
-    def test_style_reference_context_is_observation_labeled(self):
-        paths = [
-            "Reference/VB_UI_002_daily_reward_ref.lua",
-            "Reference/VB_UI_003_trade_window_ref.lua",
-        ]
-        profile, prompt = load_style_reference_context(paths)
-        self.assertEqual(len(profile["sources"]), 2)
-        self.assertIn("local observations", prompt)
-        self.assertIn("do not copy blindly", prompt)
+    EVALS_DIR = Path(__file__).parent.parent / "Evals"
 
-    def test_repair_core_evals_parse(self):
-        for path in discover_repair_core_evals():
+    def test_all_fixtures_parse(self):
+        lua_files = sorted(self.EVALS_DIR.rglob("*.lua"))
+        # Exclude evalutils type stubs
+        lua_files = [f for f in lua_files if "evalutils" not in str(f)]
+        self.assertGreater(len(lua_files), 0, "No eval fixtures found")
+        for path in lua_files:
             parsed = parse_eval(str(path))
-            self.assertEqual(parsed.scenario_name, path.stem)
-            self.assertEqual(parsed.place, "baseplate.rbxl")
-            self.assertTrue(parsed.prompt_text)
+            self.assertTrue(parsed.scenario_name, f"Empty scenario_name in {path.name}")
+            self.assertTrue(parsed.prompt_text, f"Empty prompt in {path.name}")
+            self.assertEqual(parsed.place, "baseplate.rbxl", f"Wrong place in {path.name}")
 
-    def test_repair_snippets_have_no_intervention_calls(self):
-        forbidden = ("model", "api", "http", "judge", "spatial", "helper", "primitive", "verifier")
-        for snippet in REPAIR_SNIPPETS.values():
-            lowered = snippet.lower()
-            for term in forbidden:
-                self.assertNotIn(term, lowered)
+    def test_gameplay_fixture_exists(self):
+        gameplay = list((self.EVALS_DIR / "Gameplay").glob("*.lua"))
+        self.assertGreater(len(gameplay), 0, "No Gameplay fixtures found")
+
+    def test_building_fixtures_exist(self):
+        building = list((self.EVALS_DIR / "Building").glob("*.lua"))
+        self.assertGreater(len(building), 0, "No Building fixtures found")
+
+    def test_ui_fixtures_exist(self):
+        ui = list((self.EVALS_DIR / "UI").glob("*.lua"))
+        self.assertGreater(len(ui), 0, "No UI fixtures found")
 
 
 if __name__ == "__main__":

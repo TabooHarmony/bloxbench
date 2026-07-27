@@ -26,17 +26,6 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-# Auto-route skills based on eval prompt content
-try:
-    from skill_router import SkillRouter
-except ImportError:
-    SkillRouter = None
-# Visual judge support
-try:
-    from judge import VisualJudge
-except ImportError:
-    VisualJudge = None
-
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
@@ -45,9 +34,6 @@ from mcp.client.stdio import stdio_client
 from mcp import ClientSession
 import aiohttp
 from dotenv import load_dotenv
-from spatial_tools import SpatialTooling
-from style_extraction import extract_style_profile, style_profile_prompt
-from ui_track import aggregate_ui_results, default_ui_visual_rubric
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -73,12 +59,6 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def load_style_reference_context(paths: list[str]) -> tuple[dict, str]:
-    """Load UI reference observations for optional model-side context."""
-    profile = extract_style_profile(paths)
-    return profile, style_profile_prompt(profile)
 
 
 def build_source_provenance(repo_root: Path, harness_path: Path, eval_files: list[Path]) -> dict:
@@ -143,27 +123,10 @@ class RunConfig:
     eval_timeout: int = 600
     run_dir: str = ""
     skill_loader: Optional["SkillLoader"] = None
-    skill_router: Optional["SkillRouter"] = None
     skills_index: Optional[str] = None
-    judge: Optional[object] = None
-    judge_enabled: bool = False
     temperature: float = 0
     max_tokens_per_eval: int = 500000
-    solver_code: Optional[str] = None  # SpatialSolver.lua source (solver mode)
-    no_gate: bool = False  # Skip check_scene, capture everything for human review
-    fixer: bool = False  # Run StructuralFixer after build, before screenshots
-    fixer_code: Optional[str] = None  # StructuralFixer.lua source
-    helpers_code: Optional[str] = None  # SpatialHelpers.lua source (helpers mode)
-    primitives_code: Optional[str] = None  # PartPrimitives.lua source (primitives mode)
-    protocol_text: Optional[str] = None  # model-side decomposition protocol
-    spatial_tools: bool = False  # local observation and intent tools
-    auto_spatial_feedback: bool = False  # harness-injected post-edit state diff
-    actor_verifier: bool = False  # fresh read-only verifier plus one repair pass
-    compile_once_repair: bool = False  # one script-first edit plus one bounded correction pass
-    repair_contract: bool = False  # inject compact named task invariants
     existing_scene: bool = False  # eval setup provides a scene to inspect or repair
-    style_profile_text: Optional[str] = None  # project-local UI reference observations
-    style_profile: Optional[dict] = None  # extracted profile for provenance
 
 
 # ════════════════════════════════════════════════════════════
@@ -269,7 +232,7 @@ def parse_eval(path: str) -> EvalFile:
         for match in re.finditer(r'(\w+)="([^"]*)"', visual_rubric_m.group(1)):
             ui_visual_rubric[match.group(1)] = match.group(2)
     if track == "ui" and not ui_visual_rubric:
-        ui_visual_rubric = default_ui_visual_rubric()
+        ui_visual_rubric = {}
 
     # Parse screenshot config
     ss_type = ""
@@ -333,37 +296,22 @@ class EvalMetrics:
     screenshot_path: Optional[str] = None
     error_category: str = ""
     retried: bool = False
-    tools_used: list = field(default_factory=list)  # unique tool names called
-    edit_count: int = 0      # multi_edit + script-creating execute_luau calls
-    max_context_tokens: int = 0  # peak prompt_tokens in final LLM round
-    skills_used: list = field(default_factory=list)  # skill files injected for this eval
-    tool_errors_by_type: dict = field(default_factory=dict)  # {tool_name: error_count}
-    tool_calls_by_type: dict = field(default_factory=dict)   # {tool_name: call_count}
+    tools_used: list = field(default_factory=list)
+    edit_count: int = 0
+    max_context_tokens: int = 0
+    skills_used: list = field(default_factory=list)
+    tool_errors_by_type: dict = field(default_factory=dict)
+    tool_calls_by_type: dict = field(default_factory=dict)
     harness_tool_calls: int = 0
     harness_tool_errors: int = 0
     harness_tool_calls_by_type: dict = field(default_factory=dict)
     harness_tool_errors_by_type: dict = field(default_factory=dict)
-    judge_scores: Optional[dict] = None
-    judge_overall: Optional[int] = None
-    derived_dimension_mean: Optional[float] = None
-    judge_reasoning: Optional[str] = None
-    judge_issues: list = field(default_factory=list)
-    visual_score: Optional[float] = None
-    visual_passed: Optional[bool] = None
-    visual_score_source: Optional[str] = None
-    judge_validation_status: Optional[str] = None
-    judge_provenance: Optional[dict] = None
     screenshot_paths: list = field(default_factory=list)
     structure_dump: Optional[str] = None
-    created_scripts: dict = field(default_factory=dict)  # name -> source code
-    tool_call_sequence: list = field(default_factory=list)  # ordered tool names
-    primitive_calls_by_type: dict = field(default_factory=dict)  # model-authored P.* calls
-    time_breakdown: dict = field(default_factory=dict)  # {llm_ms, tool_ms, screenshot_ms, setup_ms}
-    final_response_text: Optional[str] = None  # model's last message
-    fixer_report: Optional[str] = None  # StructuralFixer output log
-    verifier_report: Optional[str] = None
-    verifier_rounds: int = 0
-    repair_rounds: int = 0
+    created_scripts: dict = field(default_factory=dict)
+    tool_call_sequence: list = field(default_factory=list)
+    time_breakdown: dict = field(default_factory=dict)
+    final_response_text: Optional[str] = None
 
 
 # ════════════════════════════════════════════════════════════
@@ -999,102 +947,6 @@ def track_tool_error(m: EvalMetrics, tool_name: str, is_error: bool):
         m.tool_errors += 1
 
 
-async def run_fresh_agent_loop(
-    model: ModelConfig,
-    messages: list,
-    tools: list,
-    session,
-    m: EvalMetrics,
-    max_rounds: int,
-    max_tokens_per_eval: int,
-    label: str,
-    allowed_tools: Optional[set[str]] = None,
-    stop_after_edit: bool = False,
-) -> tuple[str, int]:
-    """Run a bounded fresh-context loop for verifier or repair phases."""
-    final_text = ""
-    rounds_used = 0
-    edit_markers = (
-        "Instance.new", ".Source =", ".Position =", ".CFrame =", ".Size =", ".Parent =",
-        ":Destroy()", ":Clone()", "SetAttribute(", "P.block", "P.cyl", "P.ball", "P.wedge",
-        "P.wall", "P.roof", "P.limb", "P.stack", "P.floor",
-    )
-    edit_done = False
-    for round_idx in range(max_rounds):
-        rounds_used = round_idx + 1
-        response = await asyncio.wait_for(
-            llm_chat(model, messages, tools, temperature=0),
-            timeout=90,
-        )
-        m.llm_calls += 1
-        usage = response.get("usage", {})
-        m.total_tokens_in += usage.get("prompt_tokens", 0)
-        m.total_tokens_out += usage.get("completion_tokens", 0)
-        m.max_context_tokens = max(m.max_context_tokens, usage.get("prompt_tokens", 0))
-        if m.total_tokens_in > max_tokens_per_eval:
-            m.error = f"token_budget_exceeded: {m.total_tokens_in} tokens"
-            m.error_category = "token_budget_exceeded"
-            break
-
-        choice = response["choices"][0]
-        message = choice["message"]
-        messages.append(message)
-        finish = choice.get("finish_reason", "")
-        if finish != "tool_calls" or not message.get("tool_calls"):
-            final_text = str(message.get("content") or "")
-            break
-
-        for tc in message["tool_calls"]:
-            m.tool_calls += 1
-            func = tc["function"]
-            tool_name = func["name"]
-            if tool_name not in m.tools_used:
-                m.tools_used.append(tool_name)
-            m.tool_call_sequence.append(tool_name)
-            try:
-                args = json.loads(func.get("arguments", "{}"))
-            except json.JSONDecodeError:
-                args = {}
-            if allowed_tools is not None and tool_name not in allowed_tools:
-                tool_out = f"Tool error: {label} is read-only; {tool_name} is not allowed"
-                tool_is_err = True
-            else:
-                try:
-                    result = await session.call_tool(tool_name, args)
-                    tool_out = get_tool_text(result)
-                    tool_is_err = is_tool_error(result, tool_out)
-                except Exception as exc:
-                    tool_out = f"Tool error: {exc}"
-                    tool_is_err = True
-            track_tool_error(m, tool_name, tool_is_err)
-            if tool_name == "execute_luau" and any(marker in str(args.get("code", "")) for marker in edit_markers):
-                m.edit_count += 1
-                if stop_after_edit:
-                    edit_done = True
-            messages.append({"role": "tool", "tool_call_id": tc["id"], "content": tool_out[:4000]})
-        if stop_after_edit and edit_done:
-            break
-    if not final_text and not m.error:
-        messages.append({
-            "role": "user",
-            "content": f"{label}: stop using tools now and return the requested final report or repair completion text.",
-        })
-        response = await asyncio.wait_for(
-            llm_chat(model, messages, [], temperature=0),
-            timeout=90,
-        )
-        m.llm_calls += 1
-        usage = response.get("usage", {})
-        m.total_tokens_in += usage.get("prompt_tokens", 0)
-        m.total_tokens_out += usage.get("completion_tokens", 0)
-        m.max_context_tokens = max(m.max_context_tokens, usage.get("prompt_tokens", 0))
-        if m.total_tokens_in <= max_tokens_per_eval:
-            final_text = str(response.get("choices", [{}])[0].get("message", {}).get("content") or "")
-            rounds_used += 1
-        else:
-            m.error = f"token_budget_exceeded: {m.total_tokens_in} tokens"
-            m.error_category = "token_budget_exceeded"
-    return final_text, rounds_used
 async def harness_call_tool(session, tool_name: str, args: dict, m: EvalMetrics):
     """Call an MCP tool from harness code with error tracking.
 
@@ -1201,16 +1053,6 @@ async def _run_single_eval_inner(
                 if run.skill_loader:
                     openai_tools.append(SkillLoader.tool_definition())
                     logger.info(f"[{ev.scenario_name}] skill_view tool appended ({len(run.skill_loader.skills)} skills available)")
-                spatial_tooling = None
-                if run.spatial_tools or run.auto_spatial_feedback:
-                    spatial_tooling = SpatialTooling(
-                        lambda tool_name, tool_args: harness_call_tool(session, tool_name, tool_args, m)
-                    )
-                    if run.spatial_tools:
-                        openai_tools.extend(SpatialTooling.tool_definitions())
-                        logger.info(f"[{ev.scenario_name}] local spatial tools appended")
-                    if run.auto_spatial_feedback:
-                        logger.info(f"[{ev.scenario_name}] automatic spatial feedback enabled")
                 logger.info(f"[{ev.scenario_name}] {len(openai_tools)} tools available")
 
                 # Studio readiness probe: wait until execute_luau actually works
@@ -1241,59 +1083,6 @@ if sl then sl:Destroy() end
 return "spawn_removed"
 """}, m)
 
-                # 4b. Solver mode: upload SpatialSolver module to ReplicatedStorage
-                if run.solver_code:
-                    solver_upload = f"""
-local RS = game:GetService("ReplicatedStorage")
-local existing = RS:FindFirstChild("SpatialSolver")
-if existing then existing:Destroy() end
-local mod = Instance.new("ModuleScript")
-mod.Name = "SpatialSolver"
-mod.Source = [==[{run.solver_code}]==]
-mod.Parent = RS
-return "solver_uploaded"
-"""
-                    _, solver_text = await harness_call_tool(
-                        session, "execute_luau",
-                        {"datamodel_type": "Edit", "code": solver_upload}, m
-                    )
-                    logger.info(f"[{ev.scenario_name}] Solver module uploaded: {solver_text[:60]}")
-
-                # 4c. Helpers mode: upload SpatialHelpers module to ReplicatedStorage
-                if run.helpers_code:
-                    helpers_upload = f"""
-local RS = game:GetService("ReplicatedStorage")
-local existing = RS:FindFirstChild("SpatialHelpers")
-if existing then existing:Destroy() end
-local mod = Instance.new("ModuleScript")
-mod.Name = "SpatialHelpers"
-mod.Source = [==[{run.helpers_code}]==]
-mod.Parent = RS
-return "helpers_uploaded"
-"""
-                    _, helpers_text = await harness_call_tool(
-                        session, "execute_luau",
-                        {"datamodel_type": "Edit", "code": helpers_upload}, m
-                    )
-                    logger.info(f"[{ev.scenario_name}] SpatialHelpers module uploaded: {helpers_text[:60]}")
-
-                # 4c-b. Primitives mode: upload PartPrimitives module to ReplicatedStorage
-                if run.primitives_code:
-                    primitives_upload = """
-local RS = game:GetService("ReplicatedStorage")
-local existing = RS:FindFirstChild("PartPrimitives")
-if existing then existing:Destroy() end
-local mod = Instance.new("ModuleScript")
-mod.Name = "PartPrimitives"
-mod.Source = [==[""" + run.primitives_code + """]==]
-mod.Parent = RS
-return "primitives_uploaded"
-"""
-                    _, primitives_text = await harness_call_tool(
-                        session, "execute_luau",
-                        {"datamodel_type": "Edit", "code": primitives_upload}, m
-                    )
-                    logger.info(f"[{ev.scenario_name}] PartPrimitives module uploaded: {primitives_text[:60]}")
 
 # ════════════════════════════════════════════════════════════
                 setup_lua = f"""
@@ -1331,31 +1120,13 @@ return "ok"
                     return m
 
                 m.time_breakdown["setup_ms"] = int((time.time() - t0) * 1000)
-                if run.auto_spatial_feedback and spatial_tooling:
-                    baseline_status = await spatial_tooling.prime_auto_feedback()
-                    if baseline_status.startswith("Tool error:"):
-                        logger.warning(f"[{ev.scenario_name}] automatic spatial baseline failed: {baseline_status[:200]}")
-                    else:
-                        logger.info(f"[{ev.scenario_name}] automatic spatial baseline captured")
                 # 6. Build messages for LLM
                 messages = []
                 # Skills mode: use skill index as system prompt
                 if run.skills_index:
                     messages.append({"role": "system", "content": run.skills_index})
 
-                # Auto-route relevant skills based on eval prompt content
-                if run.skill_router is not None:
-                    routed_skills = run.skill_router.route(ev.prompt_text, top_n=2)
-                    if routed_skills:
-                        for skill_name in routed_skills:
-                            skill_content = run.skill_router.get_skill_content(skill_name)
-                            if skill_content:
-                                # Truncate to prevent context bloat (max 3K chars per skill)
-                                truncated = skill_content[:3000]
-                                messages.append({"role": "system", "content": f'## Relevant Skill: {skill_name}\n\n{truncated}'})
-                                logger.info(f"[{ev.scenario_name}] auto-routed skill: {skill_name} ({len(skill_content)} chars)")
-                    logger.info(f"[{ev.scenario_name}] skill index injected ({len(run.skills_index or '')} chars)")
-                # Luau constraints + building style guidance (always on for research splinter)
+                # Luau constraints + building style guidance
                 LUAU_SYSTEM_PROMPT = (
                     "You are working in Roblox Studio edit mode on an empty baseplate. "
                     "Your task is to build what is described using execute_luau with datamodel_type='Edit'. "
@@ -1376,104 +1147,6 @@ return "ok"
                     "Openings (doors, windows) should be real gaps or transparent parts, not flat decals.\n"
                     "The build should be recognizable from front, side, and top."
                 )
-                # Solver mode: append spec vocabulary
-                if run.solver_code:
-                    LUAU_SYSTEM_PROMPT += (
-                        "\n\n"
-                        "## SpatialSolver Module\n\n"
-                        "A SpatialSolver module is available at `game.ReplicatedStorage.SpatialSolver`. "
-                        "It lets you describe structures declaratively instead of computing CFrames manually.\n\n"
-                        "Usage:\n"
-                        "```lua\n"
-                        "local Solver = require(game.ReplicatedStorage.SpatialSolver)\n"
-                        "local result = Solver.build({\n"
-                        "    components = {\n"
-                        "        {name = \"base\", shape = \"block\", size = {20, 2, 20}, material = \"Stone\"},\n"
-                        "        {name = \"tower_nw\", shape = \"cylinder\", diameter = 6, height = 20,\n"
-                        "         position = {relative = \"base\", at = \"corner_nw\", offset_y = 10}},\n"
-                        "        {name = \"door\", type = \"csg_subtract\", target = \"base\", shape = \"block\",\n"
-                        "         size = {3, 4, 1}, position = {relative = \"base\", at = \"on_face_s\", center_x = true}},\n"
-                        "    }\n"
-                        "})\n"
-                        "-- result = { success = true, parts = {...}, bounds = {...}, errors = {} }\n"
-                        "```\n\n"
-                        "### Shapes\n"
-                        "block, cylinder (diameter+height), ball (diameter), wedge, cone (size)\n\n"
-                        "### Position\n"
-                        "{ relative = \"<name>\", at = \"<anchor>\", offset_x = N, offset_y = N, offset_z = N }\n"
-                        "OR { absolute = {x, y, z} }\n\n"
-                        "### Anchors\n"
-                        "on_top, on_bottom, at_corner_nw/ne/sw/se, on_face_n/s/e_w/center, center\n"
-                        "around_circumference (with count, radius, level_y, start_angle)\n\n"
-                        "### CSG\n"
-                        "{ type = \"csg_subtract\", target = \"<name>\", shape = \"block\", size = {...}, position = {...} }\n"
-                        "{ type = \"csg_union\", target = \"<name>\", ... }\n\n"
-                        "### Properties\n"
-                        "material, color (RGB table or hex string), anchored, can_collide, transparency, name\n\n"
-                        "The solver computes all CFrames. You never touch coordinates. "
-                        "Describe what you want and where it goes relative to other parts."
-                    )
-                # Helpers v2: short factory API (H is auto-injected into execute_luau)
-                if run.helpers_code:
-                    LUAU_SYSTEM_PROMPT += (
-                        "\n\n"
-                        "## SpatialHelpers v2 (use these to build)\n\n"
-                        "`H` is already available inside every execute_luau call. "
-                        "Do NOT require it, do NOT script_read SpatialHelpers, do NOT invent coordinates by hand when H can place.\n\n"
-                        "Factories create + style + place + parent in one call:\n"
-                        "```lua\n"
-                        "local floor = H.block({20, 1, 20}, {name=\"Floor\", material=\"Concrete\", color={150,150,150}, ground=true})\n"
-                        "local wall = H.block({20, 8, 1}, {name=\"Wall\", material=\"Brick\", color={180,100,80}, of=floor, on=\"top\", face=\"south\"})\n"
-                        "local pillar = H.block({2, 10, 2}, {name=\"Pillar\", of=floor, on=\"top\", corner=\"nw\"})\n"
-                        "local post = H.cyl(1.5, 6, {name=\"Post\", material=\"Wood\", next_to=floor, dir=\"east\", gap=2})\n"
-                        "local roof = H.wedge({20, 4, 12}, {name=\"Roof\", of=wall, on=\"top\"})\n"
-                        "local ball = H.ball(3, {name=\"Orb\", of=pillar, on=\"top\", color={255,200,50}, material=\"Neon\"})\n"
-                        "```\n\n"
-                        "Placement fields on opts: `ground=true` | `at={x,y,z}` | `of=part` + `on=\"top\"|\"bottom\"|\"ground\"` | "
-                        "`corner=\"nw|ne|sw|se\"` | `face=\"north|south|east|west\"` | `next_to=part` + `dir=` + `gap=` | `offset={x,y,z}`.\n"
-                        "Style fields: `name`, `color={r,g,b}`, `material` (string), `transparency`.\n"
-                        "Also: `H.place(part, opts)` for an existing part; `H.color` / `H.material`.\n"
-                        "Prefer a few H.block/H.cyl calls over many raw Instance.new parts."
-                    )
-                # Primitives mode: structural composition API (P is auto-injected)
-                if run.primitives_code:
-                    LUAU_SYSTEM_PROMPT += (
-                        "\n\n"
-                        "## PartPrimitives (use these to build connected structures)\n\n"
-                        "`P` is already available inside every execute_luau call. "
-                        "Do NOT require it, do NOT script_read PartPrimitives.\n\n"
-                        "These create CONNECTED subassemblies, not isolated parts:\n"
-                        "```lua\n"
-                        "-- floor seats on ground\n"
-                        "local floor = P.floor({20, 1, 20}, {name=\"Floor\", material=\"Concrete\"})\n"
-                        "-- wall seats on floor, with real door gap\n"
-                        "local wall = P.wall({20, 8, 1}, {name=\"FrontWall\", on=floor, material=\"Brick\",\n"
-                        "    door={w=3, h=4, side=\"center\"}})\n"
-                        "-- pitched roof seats on wall\n"
-                        "local roof = P.roof({20, 4, 12}, {name=\"Roof\", on=wall, style=\"pitched\", material=\"WoodPlanks\"})\n"
-                        "-- define a body before attaching chains\n"
-                        "local body = P.block({8, 5, 12}, {name=\"Body\", at={0, 3, 0}, material=\"Slate\"})\n"
-                        "-- connected tail/branch chain (3 tapering segments, curving up)\n"
-                        "local tail = P.limb({{4,3,3}, {3,2,2}, {2,1.5,1.5}}, {origin=body, anchor=\"back\", angle=0, curve=15,\n"
-                        "    name=\"Tail\", material=\"Slate\"})\n"
-                        "-- stacked tower (3 levels, each on previous)\n"
-                        "local tower = P.stack({{10,10,8}, {8,8,8}, {6,6,6}}, {name=\"Tower\", material=\"Slate\"})\n"
-                        "-- simple block/cyl/ball/wedge also available\n"
-                        "local pillar = P.cyl(1.5, 10, {name=\"Pillar\", on=floor, material=\"Wood\"})\n"
-                        "```\n\n"
-                        "Placement: `on=<part>` seats on top | `at={x,y,z}` absolute | `offset={x,y,z}` after placement | `rotation={rx,ry,rz}`.\n"
-                        "Style: `name`, `color={r,g,b}`, `material` (string), `transparency`.\n"
-                        "Wall: `door={w,h,side}` cuts real gap (side: left/right/center) | `direction=\"x\"|\"z\"` | `windows={{w,h,y,side}}`.\n"
-                        "Roof: `style=\"pitched\"|\"flat\"` | `direction=\"x\"|\"z\"` ridge axis | `overhang=N`.\n"
-                        "Limb: `origin=<part>` start point | `anchor=top|bottom|left|right|front|back` origin face | `angle=N` upward degrees | `yaw=N` horizontal | `curve=N` per-segment bend.\n"
-                        "Connection rule: if a part should touch another part, pass its actual return value through `on=` or `origin=`. "
-                        "Build dependency order as base/body, neck, head, then limb chains. Do not use free-standing `at=` for connected pieces. "
-                        "Use anchor=bottom for legs, anchor=left/right for wings, anchor=back for tails, and anchor=top for necks or horns.\n"
-                        "Stack: `levels={{w,h,d},...}` each level auto-seated on previous.\n\n"
-                        "Use P.wall for walls with doors, P.roof for roofs, P.limb for tails/legs/branches/necks, "
-                        "P.stack for towers/buildings. Use P.block/cyl/ball/wedge for simple parts. "
-                        "Chain primitives by passing the return value as `on=` to the next."
-                    )
                 if run.existing_scene:
                     LUAU_SYSTEM_PROMPT = LUAU_SYSTEM_PROMPT.replace(
                         "on an empty baseplate", "on an existing Roblox scene that may need inspection or repair"
@@ -1481,55 +1154,8 @@ return "ok"
                         "The workspace contains only a Baseplate.",
                         "The workspace contains an existing scene provided by the eval. Inspect before changing it.",
                     )
-                if run.spatial_tools:
-                    LUAU_SYSTEM_PROMPT += (
-                        "\\n\\n## Spatial observation tools\\n"
-                        "spatial_snapshot inspects the live scene without changing it. "
-                        "spatial_intent_add records expected components without creating geometry. "
-                        "spatial_intent_check compares those expectations with the live scene. "
-                        "spatial_lint checks every actual part for disconnected or ungrounded components. "
-                        "Use spatial_lint before claiming completion. "
-                        "Use these tools to understand and verify the scene, but create and repair parts with raw execute_luau."
-                    )
-                if run.auto_spatial_feedback:
-                    LUAU_SYSTEM_PROMPT += (
-                        "\\n\\nThe harness automatically appends a compact AUTO_SPATIAL_FEEDBACK diff after each execute_luau edit. "
-                        "Treat it as the current scene state, especially changed parts, disconnected components, and partial-apply warnings."
-                    )
-                if run.compile_once_repair:
-                    LUAU_SYSTEM_PROMPT += (
-                        "\\n\\n## Script-first execution\\n"
-                        "Inspect the existing scene, then write one complete raw Luau repair script and execute it once. "
-                        "Do not make incremental geometry edits or replay a whole script after an error. After the first "
-                        "edit-bearing execute_luau call, stop and let the harness run one bounded correction pass."
-                    )
-                if run.protocol_text:
-                    LUAU_SYSTEM_PROMPT += "\\n\\n## Model-side construction protocol\\n\\n" + run.protocol_text
-                if ev.track == "ui" and run.style_profile_text:
-                    LUAU_SYSTEM_PROMPT += "\\n\\n" + run.style_profile_text
                 messages.append({"role": "system", "content": LUAU_SYSTEM_PROMPT})
-                actor_prompt = ev.prompt_text
-                if run.actor_verifier:
-                    actor_prompt += (
-                        "\\n\\nThis is a bounded actor phase. Make the smallest repair needed for the named defect, "
-                        "then stop. Do not redesign valid geometry. A separate verifier will inspect your result."
-                    )
-                if run.repair_contract:
-                    actor_prompt += (
-                        "\\n\\n## Explicit repair contract\\n"
-                        "Required named structure: Foundation, TowerShaft, Door, LookoutPlatform, and battlements. "
-                        "Preserve valid existing geometry and do not add optional windows or unrelated decorative parts. "
-                        "The platform must be centered on and visibly connected to the shaft. Battlements must sit on "
-                        "the platform and form a readable lookout rim. If a flagpole and flag are present, the flag must "
-                        "visibly attach to the pole. Prefer correcting or removing only clearly disconnected upper "
-                        "pieces. Finish with one coherent repair script, not a sequence of partial edits."
-                    )
-                if run.compile_once_repair:
-                    actor_prompt += (
-                        "\\n\\nThis is the script-first pass. Inspect first, then make all intended changes in one complete "
-                        "edit-bearing execute_luau script. Stop after that script; do not perform incremental follow-up edits."
-                    )
-                messages.append({"role": "user", "content": actor_prompt})
+                messages.append({"role": "user", "content": ev.prompt_text})
 
                 # 7. LLM tool-use loop
                 llm_start = time.time()
@@ -1598,28 +1224,6 @@ return "ok"
                                 args = json.loads(func["arguments"])
                             except json.JSONDecodeError:
                                 args = {}
-                            # Helpers v2: inject H into every execute_luau so the model never
-                            # script_reads SpatialHelpers or forgets require().
-                            if run.helpers_code and tool_name == "execute_luau":
-                                code = args.get("code", "") or ""
-                                inject = "local H = require(game.ReplicatedStorage.SpatialHelpers)\n"
-                                if code and "ReplicatedStorage.SpatialHelpers" not in code:
-                                    args = dict(args)
-                                    args["code"] = inject + code
-                            # Primitives: inject P into every execute_luau
-                            if run.primitives_code and tool_name == "execute_luau":
-                                code = args.get("code", "") or ""
-                                # Record model-authored primitive calls before injecting
-                                # the local P require, so results show whether the model
-                                # actually used the intervention rather than merely having
-                                # the module uploaded.
-                                primitive_names = re.findall(r"\bP\.(floor|wall|roof|limb|stack|block|cyl|ball|wedge)\s*\(", code)
-                                for primitive_name in primitive_names:
-                                    m.primitive_calls_by_type[primitive_name] = m.primitive_calls_by_type.get(primitive_name, 0) + 1
-                                inject = "local P = require(game.ReplicatedStorage.PartPrimitives)\n"
-                                if code and "ReplicatedStorage.PartPrimitives" not in code:
-                                    args = dict(args)
-                                    args["code"] = inject + code
                             # execute_luau that creates/modifies scripts counts as edit
                             if tool_name == "execute_luau":
                                 code = args.get("code", "")
@@ -1627,26 +1231,14 @@ return "ok"
                                     "Instance.new", ".Source =", "multi_edit",
                                     ".Position =", ".CFrame =", ".Size =", ".Parent =",
                                     ":Destroy()", ":Clone()", "SetAttribute(",
-                                    "H.block", "H.cyl", "H.ball", "H.wedge",
-                                    "P.block", "P.cyl", "P.ball", "P.wedge",
-                                    "P.wall", "P.roof", "P.limb", "P.stack", "P.floor",
                                 )
                                 if any(marker in code for marker in edit_markers):
                                     m.edit_count += 1
                                     is_execute_edit = True
-                                    if run.compile_once_repair:
-                                        script_first_edit_done = True
                             tool_out = ""
                             tool_is_err = False
-                            # Handle local spatial tools without sending them to MCP.
-                            if spatial_tooling and spatial_tooling.handles(tool_name):
-                                tool_out = await spatial_tooling.handle(tool_name, args)
-                                tool_is_err = tool_out.startswith("Tool error:")
-                                track_tool_error(m, tool_name, tool_is_err)
-                                if tool_is_err:
-                                    logger.warning(f"[{ev.scenario_name}] local tool {tool_name} returned error: {tool_out[:200]}")
                             # Handle skill_view locally (not an MCP tool)
-                            elif tool_name == "skill_view" and run.skill_loader:
+                            if tool_name == "skill_view" and run.skill_loader:
                                 skill_name = args.get("name", "")
                                 tool_out = run.skill_loader.get_skill(skill_name)
                                 logger.info(f"[{ev.scenario_name}] skill_view({skill_name}) -> {len(tool_out)} chars")
@@ -1684,16 +1276,6 @@ return "ok"
                                         m.tool_errors += 1
                                         logger.warning(f"[{ev.scenario_name}] tool {func['name']} retry fail: {str(e2)[:200]}")
 
-                            if run.auto_spatial_feedback and spatial_tooling and tool_name == "execute_luau" and is_execute_edit:
-                                auto_feedback = await spatial_tooling.observe_after_edit(
-                                    edit_error=tool_is_err,
-                                    edit_result=tool_out,
-                                )
-                                if not auto_feedback.startswith("Tool error:"):
-                                    tool_out += "\\nAUTO_SPATIAL_FEEDBACK\\n" + auto_feedback
-                                else:
-                                    logger.warning(f"[{ev.scenario_name}] automatic spatial feedback failed: {auto_feedback[:200]}")
-
                             # Truncate tool results to prevent context bloat
                             if len(tool_out) > 4000:
                                 tool_out = tool_out[:4000] + "\n... [truncated, full result in tool log]"
@@ -1707,117 +1289,11 @@ return "ok"
                         if message.get("content"):
                             m.final_response_text = str(message["content"])[:2000]
                         break
-                    if run.compile_once_repair and script_first_edit_done:
-                        break
 
                 m.llm_latency_ms = int((time.time() - llm_start) * 1000)
                 m.rounds_used = round_idx + 1
                 m.time_breakdown["llm_ms"] = m.llm_latency_ms
 
-                if run.actor_verifier and not m.error:
-                    verifier_allowed = {"get_studio_state", "search_game_tree", "inspect_instance"}
-                    verifier_tools = [
-                        tool for tool in openai_tools
-                        if tool.get("function", {}).get("name") in verifier_allowed
-                    ]
-                    verifier_messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a fresh-context Roblox scene verifier. Do not edit the workspace and do not call "
-                                "execute_luau. Inspect the existing scene with read-only tools. Return either VERIFIED "
-                                "or a short list of concrete defects, naming the affected parts and the required repair."
-                            ),
-                        },
-                        {
-                            "role": "user",
-                            "content": (
-                                f"Verify this repair task:\\n{ev.prompt_text}\\n\\n"
-                                "Check whether LooseRoof is centered over and supported by the lookout column/platform, "
-                                "and whether the other existing parts were preserved."
-                            ),
-                        },
-                    ]
-                    verifier_text, verifier_rounds = await run_fresh_agent_loop(
-                        model,
-                        verifier_messages,
-                        verifier_tools,
-                        session,
-                        m,
-                        max_rounds=4,
-                        max_tokens_per_eval=run.max_tokens_per_eval,
-                        label="verifier",
-                        allowed_tools=verifier_allowed,
-                    )
-                    m.verifier_report = verifier_text[:4000]
-                    m.verifier_rounds = verifier_rounds
-                    m.rounds_used += verifier_rounds
-                    needs_repair = not verifier_text.strip().lower().startswith("verified")
-                    if needs_repair and not m.error:
-                        repair_messages = [
-                            {
-                                "role": "system",
-                                "content": (
-                                    "You are the repair actor in a fresh bounded pass. Use raw execute_luau only for the "
-                                    "smallest necessary geometry change. Preserve all valid existing parts. Inspect before "
-                                    "editing, apply the verifier's concrete repair, then stop.\\n\\n"
-                                    f"VERIFIER REPORT:\\n{verifier_text[:4000]}"
-                                ),
-                            },
-                            {"role": "user", "content": ev.prompt_text},
-                        ]
-                        repair_text, repair_rounds = await run_fresh_agent_loop(
-                            model,
-                            repair_messages,
-                            openai_tools,
-                            session,
-                            m,
-                            max_rounds=4,
-                            max_tokens_per_eval=run.max_tokens_per_eval,
-                            label="repair actor",
-                        )
-                        m.repair_rounds = repair_rounds
-                        m.rounds_used += repair_rounds
-                        if repair_text:
-                            m.final_response_text = repair_text[:2000]
-
-                if run.compile_once_repair and not m.error:
-                    repair_prompt = ev.prompt_text
-                    if run.repair_contract:
-                        repair_prompt += (
-                            "\\n\\n## Explicit repair contract\\n"
-                            "Required named structure: Foundation, TowerShaft, Door, LookoutPlatform, and battlements. "
-                            "Preserve valid existing geometry and do not add optional windows or unrelated decorative parts. "
-                            "Center the platform on the shaft, seat battlements on the platform, and visibly attach any "
-                            "flag to its pole. Correct or remove only clearly disconnected pieces."
-                        )
-                    repair_messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a fresh bounded correction actor. The initial script-first repair has already "
-                                "executed. Inspect the current scene with read-only tools, then either return VERIFIED if "
-                                "the task is satisfied or execute exactly one complete raw Luau correction script. Preserve "
-                                "valid geometry and never replay the original build. Stop after that one correction script."
-                            ),
-                        },
-                        {"role": "user", "content": repair_prompt},
-                    ]
-                    repair_text, repair_rounds = await run_fresh_agent_loop(
-                        model,
-                        repair_messages,
-                        openai_tools,
-                        session,
-                        m,
-                        max_rounds=5,
-                        max_tokens_per_eval=run.max_tokens_per_eval,
-                        label="script-first repair",
-                        stop_after_edit=True,
-                    )
-                    m.repair_rounds = repair_rounds
-                    m.rounds_used += repair_rounds
-                    if repair_text:
-                        m.final_response_text = repair_text[:2000]
 
                 # 9. Re-inject LoadedCode + EvalUtils (LLM may have wiped them)
                 await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": ENSURE_LOADED_CODE}, m)
@@ -1829,62 +1305,7 @@ return "ok"
                 except Exception:
                     pass
 
-                # 10a. Run StructuralFixer if enabled (after build, before screenshots)
-                if run.fixer and run.fixer_code:
-                    try:
-                        fixer_lua = f"""
-local NL = string.char(10)
-local mod = Instance.new("ModuleScript")
-mod.Name = "_StructuralFixer"
-mod.Source = [==[{run.fixer_code}]==]
-mod.Parent = game
-local ok, Fixer = pcall(require, mod)
-mod:Destroy()
-if not ok then return "ERROR: " .. tostring(Fixer) end
-local report = Fixer.fix()
-local result = report.summary or "done"
-for _, d in ipairs(report.details or {{}}) do
-    result = result .. NL .. "  " .. d
-end
-return result
-"""
-                        fixer_result, _ = await harness_call_tool(
-                            session, "execute_luau",
-                            {"datamodel_type": "Edit", "code": fixer_lua}, m
-                        )
-                        fixer_text = get_tool_text(fixer_result) or ""
-                        logger.info(f"  StructuralFixer: {fixer_text[:200]}")
-                        m.fixer_report = fixer_text
-                    except Exception as e:
-                        logger.warning(f"  StructuralFixer failed: {e}")
-                        m.fixer_report = f"FIXER_ERROR: {e}"
-
-                # 10b. Run check_scene (edit mode) — gate before screenshots/judge
-                # Skip entirely in --no-gate mode (human is the judge)
-                if run.no_gate:
-                    m.scene_passed = None
-                    logger.info(f"  check_scene skipped (--no-gate)")
-                else:
-                    check_scene_lua = f"""
-local evalMod = Instance.new("ModuleScript")
-evalMod.Name = "_HarnessEvalCheck"
-evalMod.Source = [==[{ev.script}]==]
-evalMod.Parent = game
-local ok, eval = pcall(require, evalMod)
-evalMod:Destroy()
-if not ok then return "false|PARSE_ERROR: " .. tostring(eval) end
-if not eval.check_scene then return "true|NO_CHECK" end
-local cok, cerr = pcall(eval.check_scene)
-if cok then return "true|pass" else return "false|" .. tostring(cerr) end
-"""
-                    scene_result, _ = await harness_call_tool(session, "execute_luau", {"datamodel_type": "Edit", "code": check_scene_lua}, m)
-                    scene_text = get_tool_text(scene_result) or "false|no_response"
-                    m.scene_passed = scene_text.startswith("true")
-                    if not m.scene_passed:
-                        m.error = f"check_scene failed: {scene_text}"
-
-                # 10b-screenshots. Capture screenshots EVEN IF gate failed, for diagnostic purposes.
-                # Gate-failed evals still get screenshots but no judge scoring.
+                # 10b. Capture screenshots for human review
                 if run.screenshots:
                     try:
                         if ev.screenshot_type == "ui":
@@ -1916,37 +1337,11 @@ if cok then return "true|pass" else return "false|" .. tostring(cerr) end
                     except Exception as e:
                         logger.debug(f"  Screenshot failed: {e}")
 
-                # 10c. Run check_game (play mode) via StudioTestService bridge
-                if run.no_gate:
-                    m.game_passed = None
-                    logger.info(f"  check_game skipped (--no-gate)")
-                elif m.scene_passed is not False:
-                    if ev.check_game_empty:
-                        m.game_passed = None
-                        logger.info(f"  check_game skipped (empty body)")
-                    else:
-                        try:
-                            game_text = await run_check_game_sts(session, ev, m)
-                            if game_text is None:
-                                m.game_passed = None
-                                logger.info(f"  check_game skipped (bridge unavailable)")
-                            elif game_text.startswith("skip"):
-                                m.game_passed = None
-                                logger.info(f"  check_game skipped")
-                            else:
-                                m.game_passed = game_text.startswith("true")
-                                if not m.game_passed:
-                                    m.error = f"check_game failed: {game_text}"
-                        except Exception as e:
-                            m.game_passed = False
-                            m.error = f"Play mode error: {str(e) or type(e).__name__}"
-
-                # In --no-gate mode, the result is unjudged and requires review.
-                if run.no_gate:
-                    m.review_required = True
-                    m.passed = False
-                else:
-                    m.passed = (m.scene_passed is True) and (m.game_passed is not False)
+                # No automated gates. Human is the judge.
+                m.scene_passed = None
+                m.game_passed = None
+                m.review_required = True
+                m.passed = False
 
                 # 11. Visual pipeline: screenshots + structure dump for ALL evals
                 # Judge scoring only for gate-passed evals.
@@ -2241,47 +1636,6 @@ return tostring(count) .. "|" .. result
                     except Exception as e:
                         logger.warning(f"  Script capture failed: {e}")
 
-                # 11e. Judge scoring — ONLY for gate-passed evals
-                judge_rubric = ev.ui_visual_rubric or ev.judge_rubric
-                if m.scene_passed is not False and run.judge_enabled and run.judge and judge_rubric:
-                    if m.screenshot_paths:
-                        try:
-                            primary_idx = {"front": 0, "side": 1, "top": 2}.get(ev.screenshot_primary, 0)
-                            if primary_idx < len(m.screenshot_paths):
-                                judge_screenshots = [m.screenshot_paths[primary_idx]]
-                            else:
-                                judge_screenshots = m.screenshot_paths[:1]
-                            judge_result = await run.judge.score(
-                                task_prompt=ev.prompt_text,
-                                rubric=judge_rubric,
-                                screenshots=judge_screenshots,
-                                structure_dump=m.structure_dump or "",
-                            )
-                            m.judge_scores = judge_result.get("scores", {})
-                            numeric_scores = [
-                                float(value) for value in (m.judge_scores or {}).values()
-                                if isinstance(value, (int, float)) and not isinstance(value, bool)
-                            ]
-                            m.derived_dimension_mean = (
-                                round(sum(numeric_scores) / len(numeric_scores), 2)
-                                if numeric_scores else None
-                            )
-                            m.judge_overall = judge_result.get("overall")
-                            m.judge_reasoning = judge_result.get("reasoning", "")
-                            m.judge_issues = judge_result.get("issues", [])
-                            m.judge_provenance = judge_result.get("_provenance")
-                            m.judge_validation_status = "valid"
-                            if ev.ui_visual_rubric and isinstance(m.judge_overall, (int, float)):
-                                m.visual_score = float(m.judge_overall)
-                                m.visual_score_source = "validated_judge_overall"
-                                m.visual_passed = m.visual_score >= 3.0
-                            logger.info(f"  Judge: overall={m.judge_overall} scores={m.judge_scores}")
-                        except ValueError as e:
-                            m.judge_validation_status = "invalid"
-                            logger.warning(f"Judge response validation failed: {e}")
-                        except Exception as e:
-                            m.judge_validation_status = "error"
-                            logger.warning(f"Judge scoring failed: {e}")
 
     except asyncio.TimeoutError:
         m.error = f"Eval timed out after {run.eval_timeout}s"
@@ -2382,12 +1736,6 @@ def aggregate_results(results: list[EvalMetrics], pass_n: int = 1) -> dict:
         "total_time_ms": sum(r.total_time_ms for r in results),
         "avg_edit_count": round(sum(r.edit_count for r in results) / total, 1) if total else 0,
         "avg_max_context_tokens": round(sum(r.max_context_tokens for r in results) / total) if total else 0,
-        "judge_evals": sum(1 for r in results if r.judge_scores is not None),
-        "avg_judge_overall": round(sum(r.judge_overall for r in results if r.judge_overall) / max(1, sum(1 for r in results if r.judge_overall)), 2) if any(r.judge_overall for r in results) else None,
-        "avg_judge_correctness": round(sum(r.judge_scores.get("correctness", 0) for r in results if r.judge_scores) / max(1, sum(1 for r in results if r.judge_scores)), 2) if any(r.judge_scores for r in results) else None,
-        "avg_judge_layout": round(sum(r.judge_scores.get("layout", 0) for r in results if r.judge_scores) / max(1, sum(1 for r in results if r.judge_scores)), 2) if any(r.judge_scores for r in results) else None,
-        "avg_judge_aesthetics": round(sum(r.judge_scores.get("aesthetics", 0) for r in results if r.judge_scores) / max(1, sum(1 for r in results if r.judge_scores)), 2) if any(r.judge_scores for r in results) else None,
-        "avg_judge_completeness": round(sum(r.judge_scores.get("completeness", 0) for r in results if r.judge_scores) / max(1, sum(1 for r in results if r.judge_scores)), 2) if any(r.judge_scores for r in results) else None,
         "avg_tool_call_sequence_len": round(sum(len(r.tool_call_sequence) for r in results) / total, 1) if total else 0,
         "avg_created_scripts": round(sum(r.created_scripts.get("_count", 0) for r in results) / total, 1) if total else 0,
         "avg_time_llm": round(sum(r.time_breakdown.get("llm_ms", 0) for r in results) / total) if total else 0,
@@ -2422,24 +1770,17 @@ def aggregate_results(results: list[EvalMetrics], pass_n: int = 1) -> dict:
 # ════════════════════════════════════════════════════════════
 
 def parse_args():
-    p = argparse.ArgumentParser(description="OpenGameEval Local Harness")
+    p = argparse.ArgumentParser(description="BloxBench Harness")
     p.add_argument("--evals-dir", required=True, help="Path to Evals/ directory")
-    p.add_argument("--track", choices=["all", "ui"], default="all", help="Eval track to run (default: all)")
-    p.add_argument("--debug-evals-dir", default=None, help="Path to DebugEvals/ directory (optional, for debug benchmark)")
-    p.add_argument("--judge", action="store_true", default=False, help="Enable visual judge scoring")
-    p.add_argument("--judge-model", default=None, help="Judge model name (default: JUDGE_MODEL env)")
-    p.add_argument("--judge-api-base", default=None, help="Judge API base (default: JUDGE_API_BASE env)")
-    p.add_argument("--judge-api-key", default=None, help="Judge API key (default: JUDGE_API_KEY env)")
+    p.add_argument("--track", choices=["all", "ui", "gameplay"], default="all", help="Eval track filter (default: all)")
     p.add_argument("--places-dir", required=True, help="Path to Places/ directory")
     p.add_argument("--studio-exe", required=True, help="Path to RobloxStudioBeta.exe")
     p.add_argument("--mcp-bat", required=True, help="Path to mcp.bat")
     p.add_argument("--model-name", required=True, help="Model name for API")
     p.add_argument("--api-base", default=None, help="OpenAI-compatible API base URL (or set LLM_API_BASE env)")
     p.add_argument("--api-key", default=None, help="API key (or set LLM_API_KEY env)")
-    p.add_argument("--skills-dir", default=None, help="Path to skills source dir for skills mode (default: roblox-brain/skills)")
-    p.add_argument("--skills", action="store_true", help="--skills mode: model gets skill index + skill_view tool, loads skills itself")
-    p.add_argument("--solver", action="store_true", help="Solver mode: upload SpatialSolver.lua to ReplicatedStorage + inject spec vocabulary into system prompt")
-    p.add_argument("--solver-path", default=None, help="Path to SpatialSolver.lua (default: ../spatial-solver/SpatialSolver.lua)")
+    p.add_argument("--skills-dir", default=None, help="Path to skills source dir for skills mode")
+    p.add_argument("--skills", action="store_true", help="Model gets skill index + skill_view tool")
     p.add_argument("--pass-n", type=int, default=1, choices=[1, 5], help="Pass@1 or Pass@5")
     p.add_argument("--max-rounds", type=int, default=25, help="Max LLM tool-use rounds per eval")
     p.add_argument("--startup-wait", type=int, default=45, help="Seconds to wait for Studio")
@@ -2448,22 +1789,9 @@ def parse_args():
     p.add_argument("--verbose", action="store_true", help="Verbose logging")
     p.add_argument("--eval-filter", default=None, help="Regex filter for eval scenario names")
     p.add_argument("--eval-timeout", type=int, default=600, help="Per-eval timeout in seconds")
-    p.add_argument("--no-gate", action="store_true", help="Skip check_scene gate entirely. Screenshots + structure dump still captured. Use when human is the judge.")
-    p.add_argument("--fixer", action="store_true", help="Run legacy/StructuralFixer.lua after model build, before screenshots. Fixes floating/overlapping parts.")
-    p.add_argument("--helpers", action="store_true", help="Upload legacy/SpatialHelpers.lua to ReplicatedStorage + inject helper API into system prompt. Model calls helper functions instead of computing coordinates.")
-    p.add_argument("--helpers-path", default=None, help="Path to SpatialHelpers.lua (default: ./legacy/SpatialHelpers.lua)")
-    p.add_argument("--primitives", action="store_true", help="Upload PartPrimitives.lua to ReplicatedStorage + inject composition API into system prompt. Model calls P.wall/P.roof/P.limb/P.stack for connected structures.")
-    p.add_argument("--primitives-path", default=None, help="Path to PartPrimitives.lua (default: ./PartPrimitives.lua)")
-    p.add_argument("--protocol-path", default=None, help="Inject a model-side construction protocol into the system prompt")
-    p.add_argument("--spatial-tools", action="store_true", help="Expose local spatial_snapshot and spatial intent tools without adding a builder API")
-    p.add_argument("--auto-spatial-feedback", action="store_true", help="Inject compact post-edit spatial diffs after model execute_luau calls without exposing new tools")
-    p.add_argument("--actor-verifier", action="store_true", help="Run a fresh read-only verifier and one bounded repair pass after the actor")
-    p.add_argument("--compile-once-repair", action="store_true", help="Run one script-first edit and one bounded correction pass")
-    p.add_argument("--repair-contract", action="store_true", help="Inject a compact named repair contract into the task prompt")
-    p.add_argument("--existing-scene", action="store_true", help="Tell the model the eval setup provides an existing scene to inspect or repair")
-    p.add_argument("--style-reference", action="append", default=[], help="Known-good UI reference Lua file; repeat for multiple references")
-    p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0 for reproducibility)")
-    p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval before abort")
+    p.add_argument("--existing-scene", action="store_true", help="Eval setup provides an existing scene")
+    p.add_argument("--temperature", type=float, default=0, help="LLM temperature (default 0)")
+    p.add_argument("--max-tokens-per-eval", type=int, default=500000, help="Max total input tokens per eval")
     return p.parse_args()
 
 
@@ -2486,36 +1814,13 @@ async def main():
         print("Error: --api-key or LLM_API_KEY env required")
         sys.exit(1)
 
-    style_references = [str(Path(raw).resolve()) for raw in args.style_reference]
-    for reference in style_references:
-        if not Path(reference).is_file():
-            print(f"Error: style reference not found: {reference}")
-            sys.exit(1)
-    style_profile = None
-    style_profile_text = None
-    if style_references:
-        try:
-            style_profile, style_profile_text = load_style_reference_context(style_references)
-        except (OSError, UnicodeError, ValueError) as exc:
-            print(f"Error: could not extract style references: {exc}")
-            sys.exit(1)
-        logger.info(f"Loaded {len(style_references)} UI style references")
-
     # Load skills mode
     skill_loader = None
-    skill_router = None
     skills_index = None
     if args.skills:
         skills_source = args.skills_dir or str(Path(__file__).parent.parent / "roblox-brain" / "skills")
         skill_loader = SkillLoader(skills_source)
         logger.info(f"Loaded skill loader ({len(skill_loader.skills)} skills from {skills_source})")
-        skill_router = None
-        if SkillRouter is not None:
-            try:
-                skill_router = SkillRouter(skills_source)
-                logger.info(f'Loaded skill router ({len(skill_router.skills)} skills)')
-            except Exception as e:
-                logger.warning(f'Skill router failed to load: {e}')
         index_path = Path(__file__).parent / "skills_index.txt"
         if index_path.exists():
             skills_index = index_path.read_text(encoding="utf-8")
@@ -2532,38 +1837,6 @@ async def main():
         mcp_path=args.mcp_bat,
         startup_wait=args.startup_wait,
     )
-    # Visual judge setup
-    judge = None
-    judge_enabled = False
-    if args.judge:
-        jm = args.judge_model or os.getenv("JUDGE_MODEL")
-        jb = args.judge_api_base or os.getenv("JUDGE_API_BASE")
-        jk = args.judge_api_key or os.getenv("JUDGE_API_KEY")
-        if jm and jb and jk and VisualJudge:
-            judge = VisualJudge(jm, jb, jk)
-            judge_enabled = True
-            logger.info(f"Visual judge enabled: model={jm}")
-            # Startup validation ping: send a 1x1 pixel to verify the judge API works
-            try:
-                import tempfile as _tf
-                _tiny_png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82'
-                _tf_path = Path(_tf.gettempdir()) / "_judge_ping.png"
-                _tf_path.write_bytes(_tiny_png)
-                await judge.score(
-                    task_prompt="test ping",
-                    rubric={"correctness": "test"},
-                    screenshots=[str(_tf_path)],
-                    structure_dump="",
-                )
-                _tf_path.unlink(missing_ok=True)
-                logger.info("Judge validation ping successful")
-            except Exception as e:
-                logger.error(f"Judge validation ping FAILED: {e}")
-                print(f"ERROR: Judge API validation failed: {e}")
-                print("Fix judge configuration before running evals. Aborting.")
-                sys.exit(1)
-        else:
-            logger.warning("--judge requested but JUDGE_MODEL/JUDGE_API_BASE/JUDGE_API_KEY not configured")
 
     run = RunConfig(
         evals_dir=args.evals_dir,
@@ -2576,104 +1849,18 @@ async def main():
         verbose=args.verbose,
         eval_timeout=args.eval_timeout,
         skill_loader=skill_loader,
-        skill_router=skill_router,
         skills_index=skills_index,
-        judge=judge,
-        judge_enabled=judge_enabled,
         temperature=args.temperature,
         max_tokens_per_eval=args.max_tokens_per_eval,
-        no_gate=args.no_gate,
-        fixer=args.fixer,
-        spatial_tools=args.spatial_tools,
-        auto_spatial_feedback=args.auto_spatial_feedback,
-        actor_verifier=args.actor_verifier,
-        compile_once_repair=args.compile_once_repair,
-        repair_contract=args.repair_contract,
         existing_scene=args.existing_scene,
-        style_profile_text=style_profile_text,
-        style_profile=style_profile,
     )
 
-    # Fixer mode: load StructuralFixer.lua
-    if args.fixer:
-        fixer_path = Path(__file__).parent / "legacy" / "StructuralFixer.lua"
-        if not fixer_path.exists():
-            print(f"Error: StructuralFixer.lua not found at {fixer_path}")
-            sys.exit(1)
-        run.fixer_code = fixer_path.read_text(encoding="utf-8")
-        logger.info(f"StructuralFixer enabled: {len(run.fixer_code)} chars")
-
-    # Helpers mode: load SpatialHelpers.lua
-    if args.helpers:
-        helpers_path = Path(args.helpers_path) if args.helpers_path else (Path(__file__).parent / "legacy" / "SpatialHelpers.lua")
-        if not helpers_path.exists():
-            print(f"Error: SpatialHelpers.lua not found at {helpers_path}")
-            sys.exit(1)
-        run.helpers_code = helpers_path.read_text(encoding="utf-8")
-        logger.info(f"SpatialHelpers enabled: {len(run.helpers_code)} chars from {helpers_path}")
-
-    # Primitives mode: load PartPrimitives.lua
-    if args.primitives:
-        primitives_path = Path(args.primitives_path) if args.primitives_path else (Path(__file__).parent / "PartPrimitives.lua")
-        if not primitives_path.exists():
-            print(f"Error: PartPrimitives.lua not found at {primitives_path}")
-            sys.exit(1)
-        run.primitives_code = primitives_path.read_text(encoding="utf-8")
-        logger.info(f"PartPrimitives enabled: {len(run.primitives_code)} chars from {primitives_path}")
-
-    # Model-side construction protocol: no helper or geometry API is injected.
-    if args.protocol_path:
-        protocol_path = Path(args.protocol_path)
-        if not protocol_path.exists():
-            print(f"Error: construction protocol not found at {protocol_path}")
-            sys.exit(1)
-        run.protocol_text = protocol_path.read_text(encoding="utf-8")
-        logger.info(f"Construction protocol enabled: {len(run.protocol_text)} chars from {protocol_path}")
-
-    # Solver mode: load SpatialSolver.lua + build spec vocabulary prompt
-    solver_code = None
-    solver_enabled = args.solver
-    if solver_enabled:
-        solver_path = args.solver_path or str(Path(__file__).parent.parent / "spatial-solver" / "SpatialSolver.lua")
-        solver_path = Path(solver_path)
-        if not solver_path.exists():
-            print(f"Error: SpatialSolver.lua not found at {solver_path}")
-            sys.exit(1)
-        solver_code = solver_path.read_text(encoding="utf-8")
-        run.solver_code = solver_code
-        logger.info(f"Solver mode enabled: {len(solver_code)} chars from {solver_path}")
-
     # Generate run directory: {mode}_{date}_{time}
-    if skill_loader:
-        mode = "skills"
-    elif solver_enabled:
-        mode = "solver"
-    elif args.helpers:
-        mode = "helpers"
-    elif args.primitives:
-        mode = "primitives"
-    elif args.protocol_path:
-        mode = "protocol"
-    elif args.spatial_tools:
-        mode = "spatial"
-    elif args.auto_spatial_feedback:
-        mode = "auto_feedback"
-    elif args.actor_verifier:
-        mode = "actor_verifier"
-    elif args.compile_once_repair:
-        mode = "compile_once"
-    else:
-        mode = "vanilla"
+    mode = "skills" if skill_loader else "vanilla"
     if args.track != "all":
         mode = f"{args.track}_{mode}"
-    if style_references:
-        mode += "_style"
-    if args.fixer:
-        mode += "_fixer"
     if args.existing_scene:
         mode += "_repair"
-    if args.repair_contract:
-        mode += "_contract"
     run_id = f"{mode}_{datetime.now().strftime('%m%d_%H%M')}"
     run_dir = f"{args.output_dir}/{run_id}"
     Path(run_dir).mkdir(parents=True, exist_ok=True)
@@ -2689,23 +1876,7 @@ async def main():
         "screenshots": run.screenshots,
         "temperature": run.temperature,
         "max_tokens_per_eval": run.max_tokens_per_eval,
-        "no_gate": run.no_gate,
-        "helpers": args.helpers,
-        "primitives": args.primitives,
-        "protocol": bool(args.protocol_path),
-        "protocol_path": str(Path(args.protocol_path).resolve()) if args.protocol_path else None,
-        "spatial_tools": args.spatial_tools,
-        "auto_spatial_feedback": args.auto_spatial_feedback,
-        "actor_verifier": args.actor_verifier,
-        "compile_once_repair": args.compile_once_repair,
-        "repair_contract": args.repair_contract,
         "existing_scene": args.existing_scene,
-        "style_references": style_references,
-        "style_profile_sha256": hashlib.sha256(
-            json.dumps(style_profile, sort_keys=True).encode("utf-8")
-        ).hexdigest() if style_profile else None,
-        "solver": solver_enabled,
-        "fixer": args.fixer,
         "eval_filter": args.eval_filter,
         "evals_dir": str(Path(args.evals_dir).resolve()),
         "places_dir": str(Path(args.places_dir).resolve()),
@@ -2735,11 +1906,6 @@ async def main():
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     # Save run manifest
-    if style_profile:
-        Path(run_dir, "style_profile.json").write_text(
-            json.dumps(style_profile, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
     manifest = {
         "run_id": run_id,
         "model": model.name,
@@ -2750,31 +1916,8 @@ async def main():
     if skill_loader:
         manifest["skills_mode"] = "skills"
         manifest["skills_source"] = str(skill_loader.source)
-    elif solver_enabled:
-        manifest["skills_mode"] = "solver"
-    elif args.helpers:
-        manifest["skills_mode"] = "helpers"
-    elif args.primitives:
-        manifest["skills_mode"] = "primitives"
-    elif args.protocol_path:
-        manifest["skills_mode"] = "protocol"
-    elif args.spatial_tools:
-        manifest["skills_mode"] = "spatial"
-    elif args.auto_spatial_feedback:
-        manifest["skills_mode"] = "auto_feedback"
-    elif args.actor_verifier:
-        manifest["skills_mode"] = "actor_verifier"
-    elif args.compile_once_repair:
-        manifest["skills_mode"] = "compile_once"
-    elif args.repair_contract:
-        manifest["skills_mode"] = "repair_contract"
-    elif style_references:
-        manifest["skills_mode"] = "style_reference"
     else:
         manifest["skills_mode"] = "vanilla"
-    if judge_enabled:
-        manifest["judge_enabled"] = True
-        manifest["judge_model"] = args.judge_model or os.getenv("JUDGE_MODEL", "")
     manifest["source_provenance"] = build_source_provenance(
         Path(__file__).resolve().parent,
         Path(__file__).resolve(),
@@ -2784,10 +1927,7 @@ async def main():
     manifest_path.write_text(json.dumps(manifest, indent=2))
 
     def build_summary(results):
-        summary = aggregate_results(results, run.pass_n)
-        if args.track == "ui":
-            summary["ui_track"] = aggregate_ui_results(results)
-        return summary
+        return aggregate_results(results, run.pass_n)
 
     # Helper: run a set of evals
     async def run_eval_set(evals_list, label):
@@ -2868,21 +2008,6 @@ async def main():
     # Run expanded evals
     all_results = await run_eval_set(evals, "EXPANDED")
 
-    # Optionally run debug evals
-    debug_results = None
-    if args.debug_evals_dir:
-        debug_dir = Path(args.debug_evals_dir)
-        debug_files = sorted(debug_dir.glob("*.lua"))
-        if debug_files:
-            debug_evals = [parse_eval(str(f)) for f in debug_files]
-            if args.track != "all":
-                debug_evals = [e for e in debug_evals if e.track == args.track]
-            if args.eval_filter:
-                pattern = re.compile(args.eval_filter)
-                debug_evals = [e for e in debug_evals if pattern.search(e.scenario_name)]
-            logger.info(f"Loaded {len(debug_evals)} debug evals")
-            debug_results = await run_eval_set(debug_evals, "DEBUG")
-
     # Save results
     results_path = Path(run_dir) / "results.json"
     summary = build_summary(all_results)
@@ -2893,12 +2018,6 @@ async def main():
         "mode": mode,
         "evals": [asdict(r) for r in all_results],
     }
-
-    debug_summary = None
-    if debug_results:
-        debug_summary = build_summary(debug_results)
-        output["debug_summary"] = debug_summary
-        output["debug_evals"] = [asdict(r) for r in debug_results]
 
     results_path.write_text(json.dumps(output, indent=2))
     logger.info(f"Results saved to {results_path}")
@@ -2926,15 +2045,6 @@ async def main():
                 print(f"    PASS RATE: {summ['pass_rate']}% ({summ['passed']}/{summ['total_evals']})")
         if summ.get("review_required", 0):
             print(f"    REVIEW REQUIRED: {summ['review_required']}")
-        ui_summary = summ.get("ui_track")
-        if ui_summary:
-            print(f"    UI FUNCTIONAL: {ui_summary['functional_pass_rate']}% ({ui_summary['functional_passed']}/{ui_summary['functional_scored_evals']})")
-            print(f"    UI CONDITIONAL VISUAL: {ui_summary.get('conditional_visual_pass_rate', ui_summary['visual_pass_rate'])}% ({ui_summary['visual_passed']}/{ui_summary['visual_scored_evals']})")
-            print(f"    UI VISUAL EVIDENCE: {ui_summary.get('visual_evidence_coverage')}% of functional passes")
-            print(f"    UI CONFIRMED COMBINED: {ui_summary.get('confirmed_combined_pass_rate', ui_summary['combined_pass_rate'])}% ({ui_summary.get('confirmed_combined_passed', ui_summary['combined_passed'])}/{ui_summary.get('confirmed_combined_scored_evals', ui_summary['combined_scored_evals'])})")
-            print(f"    UI COMBINED BOUNDS: {ui_summary.get('combined_pass_rate_lower_bound')}%-{ui_summary.get('combined_pass_rate_upper_bound')}%")
-            if ui_summary["visual_review_required"]:
-                print(f"    UI VISUAL REVIEW REQUIRED: {ui_summary['visual_review_required']}")
         print(f"    AVG ROUNDS: {summ['avg_llm_calls']}  AVG TOKENS: in={summ['avg_tokens_in']} out={summ['avg_tokens_out']}")
         print(f"    AVG EDITS: {summ['avg_edit_count']}  AVG PEAK CTX: {summ['avg_max_context_tokens']} tokens")
         print(f"    AVG LATENCY: {fmt_time(summ['avg_latency_ms'])}")
@@ -2957,8 +2067,6 @@ async def main():
     print(f"  MODEL: {model.name}")
     print(f"  RUN DIR: {run_dir}")
     print_summary(f"EXPANDED ({summary['total_evals']} evals)", summary, run.pass_n)
-    if debug_summary:
-        print_summary(f"DEBUG ({debug_summary['total_evals']} evals)", debug_summary, run.pass_n)
     print("=" * 60)
 
 
