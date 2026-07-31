@@ -10,4 +10,5 @@ __pycache__/
 *.pyc
 *.log
 *.bak
+.hermes/
 _test_mcp.py

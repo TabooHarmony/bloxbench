@@ -119,7 +119,8 @@ eval.check_scene = function()
     end
     if title and tip then
         assert(title.AbsolutePosition.Y < tip.AbsolutePosition.Y, "Title should be above tip text")
-    endend
+    end
+end
 
 eval.check_game = function()
 end

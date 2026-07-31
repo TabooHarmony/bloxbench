@@ -1,7 +1,0 @@
-{
-  "target": ["LookoutPlatform", "LookoutColumn", "LooseRoof", "LooseBattlement"],
-  "anchor": ["TowerShaft", "LookoutPlatform", "LookoutColumn", "LookoutPlatform"],
-  "relation": ["centered_over", "supported_by", "centered_over", "supported_by"],
-  "preserve": ["Foundation", "TowerShaft", "Door", "all existing battlements", "all unrelated properties"],
-  "postcheck": ["named objects exist", "upper relations are satisfied", "no unrelated parts were added"]
-}

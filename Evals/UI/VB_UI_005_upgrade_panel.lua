@@ -19,7 +19,7 @@ local eval: BaseEval = {
                 role = "user",
                 content = [[Build an upgrades panel for a simulator game.
 
-Show a title at the top. Below it, three stat rows stacked vertically. Each row should show a stat name on the left, the current level in the middle, and an upgrade button on the right. At the bottom, show a close button. Use green for the upgrade buttons and red for the close button. Make it look polished with rounded corners on a dark background.]],
+Show a title at the top. Below it, three stat rows stacked vertically. Each row should show a stat name on the left, the current level in the middle, and an upgrade button with a visible cost on the right. At the bottom, show a close button. Use green for the upgrade buttons and red for the close button. Make it look polished with rounded corners on a dark background.]],
                 request_id = "vb_ui_005"
             }
         }
@@ -114,7 +114,8 @@ eval.check_scene = function()
     if closeBtn then
         local c = closeBtn.BackgroundColor3
         assert(c.R > c.G and c.R > c.B, "Close button should be reddish")
-    endend
+    end
+end
 
 eval.check_game = function()
 end

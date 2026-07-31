@@ -126,7 +126,8 @@ eval.check_scene = function()
     if cancelBtn then
         local c = cancelBtn.BackgroundColor3
         assert(c.R > c.G and c.R > c.B, "Cancel button should be reddish")
-    endend
+    end
+end
 
 eval.check_game = function()
 end

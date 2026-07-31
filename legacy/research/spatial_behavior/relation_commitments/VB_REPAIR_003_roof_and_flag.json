@@ -1,7 +1,0 @@
-{
-  "target": ["LooseRoof", "Flag"],
-  "anchor": ["LookoutColumn", "Flagpole"],
-  "relation": ["centered_over and supported_by", "attached_to"],
-  "preserve": ["Foundation", "TowerShaft", "Door", "LookoutPlatform", "LookoutColumn", "battlements", "Flagpole", "all non-CFrame properties"],
-  "postcheck": ["roof is centered and supported", "flag is attached to pole", "all preserved objects remain unchanged"]
-}

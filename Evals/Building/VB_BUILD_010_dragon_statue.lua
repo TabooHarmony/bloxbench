@@ -15,7 +15,7 @@ local eval: BaseEval = {
         {
             {
                 role = "user",
-                content = [[A dragon statue with wings, tail, and a raised head. Make it one connected assembly: ground the pedestal, attach the body to it, attach the neck to the body, attach the head to the neck, and start each leg, wing, and tail chain from an existing body part. For P.limb attachments, use anchor="bottom" for legs, anchor="left" or "right" for wings, anchor="back" for the tail, and anchor="top" for the neck and horns.]],
+                content = [[A dragon statue with wings, tail, and a raised head. Make it one connected assembly: ground the pedestal, attach the body to it, attach the neck to the body, attach the head to the neck, and start each leg, wing, tail, and horn chain from an existing body part. Avoid disconnected pieces and make the dragon silhouette readable from the front and side.]],
                 request_id = "vb_build_010"
             }
         }

@@ -19,7 +19,7 @@ local eval: BaseEval = {
                 role = "user",
                 content = [[Create a daily rewards popup for a 7-day streak system.
 
-Show a title at the top, then 7 day slots in a horizontal row. Each slot should have a day number and a reward icon. One day should be highlighted with a colored border to show it's claimable. Days that are already claimed should look faded. Include a claim button below the row and a close button in the top-right corner. Make it look like a polished popup with rounded corners on a dark background.]],
+Show a title at the top, then 7 day slots in a horizontal row. Each slot should have a day number and a reward icon. Make day 3 the highlighted claimable day, show days 1 and 2 as already claimed and faded, and show later days as upcoming. Include a claim button below the row and a close button in the top-right corner. Make it look like a polished popup with rounded corners on a dark background.]],
                 request_id = "vb_ui_002"
             }
         }
@@ -118,7 +118,8 @@ eval.check_scene = function()
         if d:IsA("TextLabel") or d:IsA("TextButton") then
             assert(d.ZIndex >= container.ZIndex, "Content elements should have ZIndex >= container")
         end
-    endend
+    end
+end
 
 eval.check_game = function()
 end

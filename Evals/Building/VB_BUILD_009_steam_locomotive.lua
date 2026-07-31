@@ -15,7 +15,7 @@ local eval: BaseEval = {
         {
             {
                 role = "user",
-                content = [[A steam locomotive]],
+                content = [[A steam locomotive with a horizontal engine body, a rear cabin, wheels underneath, a chimney, and a readable train silhouette from the side]],
                 request_id = "vb_build_009"
             }
         }

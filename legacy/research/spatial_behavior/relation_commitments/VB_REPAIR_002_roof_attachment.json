@@ -1,7 +1,0 @@
-{
-  "target": ["LooseRoof"],
-  "anchor": ["LookoutColumn", "LookoutPlatform"],
-  "relation": ["centered_over", "supported_by"],
-  "preserve": ["Foundation", "TowerShaft", "Door", "LookoutPlatform", "LookoutColumn", "all battlements", "Flagpole", "Flag", "all non-CFrame properties"],
-  "postcheck": ["LooseRoof is centered over the column", "LooseRoof bottom meets column top", "all other parts and properties remain unchanged"]
-}
