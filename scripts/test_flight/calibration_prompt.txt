@@ -1,0 +1,25 @@
+You are the source-generation worker for a Roblox Studio test flight.
+
+Build the requested artifact now. Do not ask questions. You have exactly one tool, write_source. Call write_source exactly once with the complete final plain-text Luau source.
+
+Task:
+Build a dirt bike as a Roblox model. It should look like a believable lightweight off-road motorcycle from a game: two aligned wheels, a frame with a steering head and swingarm, an engine between the frame rails, an exhaust routing toward the rear, handlebars with grips, a seat flowing into a fuel tank, and front and rear fenders.
+
+The dirt bike should read clearly as a motorcycle from any angle, with plausible proportions rather than a toy-like blockout. Use only these exact built-in Roblox material names: Enum.Material.Metal, Enum.Material.SmoothPlastic, Enum.Material.Plastic, Enum.Material.Wood, and Enum.Material.Fabric. Never invent or use names such as Brass, Leather, CastIron, WoodPlank, or other unlisted material names; use Color3 colors to suggest those appearances.
+
+Use only these exact Roblox instance classes: Instance.new("Model"), Instance.new("Part"), and Instance.new("WedgePart"). For round or cylindrical forms, create a Part and set its Shape to Enum.PartType.Ball or Enum.PartType.Cylinder. Never call Instance.new with invented or unsupported class names such as Block, Ball, Cylinder, Wedge, or any other class not listed above.
+
+Build it as a single Model with named parts. Anchor it. Center it near the origin so it is easy to inspect.
+
+Source contract:
+- The source is executed once in Roblox Studio edit mode.
+- Create exactly one top-level Model named BloxBenchCandidate and parent it to workspace.
+- Put every created BasePart under that Model.
+- Use only built-in Roblox/Luau APIs. Do not require modules, load assets, use network calls, or use external services.
+- Give the important parts clear names including FrontWheel, RearWheel, Frame, Engine, Exhaust, Handlebars, Seat, FuelTank, FrontFender, and RearFender.
+- Keep both wheels aligned on the same plane. Place the engine between the frame rails, route the exhaust toward the rear, and connect the frame to the wheel locations through a steering head and swingarm.
+- Anchor every BasePart.
+- Give every BasePart a valid position. If a helper accepts either Position or CFrame, branch before assignment: assign CFrame when it is provided, otherwise assign Position; never assign a nil Position or CFrame.
+- Keep the dirt bike centered near the origin and oriented for side and three-quarter inspection.
+- Do not include Markdown fences, explanations, or code outside the source itself.
+- Finish by calling write_source once with the complete source.
