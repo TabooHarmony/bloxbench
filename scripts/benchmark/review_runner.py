@@ -338,6 +338,66 @@ def store_screenshot(
     return record
 
 
+def capture_screenshot(
+    run: "ReviewRun",
+    instance_id: str,
+    artifact_dir: Path,
+    *,
+    timeout: float = 240,
+    attempts: int = 2,
+) -> dict[str, Any]:
+    """Capture a Studio viewport screenshot, retrying with a camera nudge.
+
+    The plugin's RenderMonitor fast-fails screenshots when the Studio viewport
+    has not rendered a frame in ~1s (stalled render loop, often after the
+    window was hidden for a long time). A camera nudge forces a frame; if that
+    does not help, the error tells the operator a Studio restart is needed.
+    """
+    last_exc: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            # Nudge the camera so Studio emits a fresh frame, then give the
+            # render loop a beat before capturing.
+            try:
+                run.bridge(
+                    {
+                        "operation": "exec",
+                        "instance_id": instance_id,
+                        "target": "edit",
+                        "code": (
+                            "local cam = workspace.CurrentCamera; "
+                            "if cam then cam.CFrame = cam.CFrame * CFrame.new(1, 0, 0) end; "
+                            "task.wait(0.3); "
+                            "if cam then cam.CFrame = cam.CFrame * CFrame.new(-1, 0, 0) end; "
+                            "return {marker = 'camera-nudge', ok = true}"
+                        ),
+                        "timeout": 60,
+                    },
+                    timeout=90,
+                )
+            except Exception:
+                pass
+            time.sleep(1.0)
+        try:
+            return run.bridge(
+                {
+                    "operation": "screenshot",
+                    "instance_id": instance_id,
+                    "arguments": {"format": "png"},
+                    "artifact_dir": str(artifact_dir),
+                },
+                timeout=timeout,
+            )
+        except Exception as exc:
+            last_exc = exc
+            if attempt < attempts:
+                continue
+    raise RuntimeError(
+        "screenshot capture failed after retries; the Studio render loop is "
+        f"stalled (RenderMonitor no-frame). Restart Studio and rerun: {last_exc}"
+    )
+
+
 def runtime_client_role(response: dict[str, Any]) -> str:
     status = response.get("status") if isinstance(response, dict) else None
     instances = status.get("instances") if isinstance(status, dict) else None
@@ -761,13 +821,10 @@ def run_review(
                 timeout=240,
             )
             run.require_luau(camera, "hero camera", "bloxbench-camera")
-            screenshot = run.bridge(
-                {
-                    "operation": "screenshot",
-                    "instance_id": run.instance_id,
-                    "arguments": {"format": "png"},
-                    "artifact_dir": str(run_dir / "screenshots" / "raw" / "initial" / primary_angle),
-                },
+            screenshot = capture_screenshot(
+                run,
+                run.instance_id,
+                run_dir / "screenshots" / "raw" / "initial" / primary_angle,
                 timeout=240,
             )
             hero_record = store_screenshot(
@@ -822,13 +879,10 @@ def run_review(
                         timeout=180,
                     )
                     run.require_luau(frame_camera, f"camera {mode}/{angle}", "bloxbench-camera")
-                    frame = run.bridge(
-                        {
-                            "operation": "screenshot",
-                            "instance_id": run.instance_id,
-                            "arguments": {"format": "png"},
-                            "artifact_dir": str(run_dir / "screenshots" / "raw" / f"state-{mode}" / angle),
-                        },
+                    frame = capture_screenshot(
+                        run,
+                        run.instance_id,
+                        run_dir / "screenshots" / "raw" / f"state-{mode}" / angle,
                         timeout=240,
                     )
                     angle_suffix = "" if len(angles) == 1 else f"-{angle}"
