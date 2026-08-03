@@ -1,31 +1,34 @@
 # BloxBench
 
-Construction benchmark for Roblox builds from text prompts.
+BloxBench is a deterministic construction benchmark for Roblox builds generated from text prompts.
 
-## architecture
+## active pilot
 
-There is no python harness. The eval loop is:
+The first real model-backed evaluation set contains two task families and one
+small control:
 
-1. **Fixtures** in `Evals/` define prompts, rubrics, and metadata.
-2. **Subagents** (hermes `delegate_task`) are the model under test. They iterate using `rsc_submit`/`rsc_job` to execute luau in Studio.
-3. **RSC** (`/root/roblox-studio-control`) owns the Studio control plane.
-4. **Human pairwise review** is the sole quality gate.
+- `Evals/Scenes/VB_SCENE_001_waterfall_landmark.lua`
+- `Evals/Gameplay/VB_GAMEPLAY_001_grapple_traversal_course.lua`
+- `Evals/Gameplay/VB_GAMEPLAY_002_lucky_block.lua`
 
-## fixture tree
+Each fixture declares its prompt, semantic components, deterministic commands or states, runtime mode, evidence requirements, reset and cleanup contract, and human-review boundary.
 
-32 Lua fixtures across six tracks:
+## execution pipeline
 
-- `Evals/Building/`: 13
-- `Evals/UI/`: 5
-- `Evals/Gameplay/`: 5
-- `Evals/Props/`: 3
-- `Evals/Scenes/`: 3
-- `Evals/VFX/`: 3
+1. `scripts/benchmark/fixture_contract.py` discovers and validates a fixture.
+2. A model or subagent produces one candidate Luau source file.
+3. `scripts/benchmark/review_runner.py` submits the source through RSC and Studio.
+4. The runner performs setup, scene checks, runtime actions, readbacks, fixed-frame viewport screenshots, cleanup, reset, provenance, and optional video attachment only when viewport-only proof exists.
+5. `scripts/benchmark/pairwise_packet.py` packages two valid runs for blind human pairwise review.
 
-## rules
+RSC and Studio are the execution boundary. Nested application results must succeed in addition to transport success.
 
-- One benchmark entrypoint: subagent + RSC. No harness, no wrapper, no second runner.
-- Human pairwise review only: A better, B better, tie, both bad. No automated gates, LLM judges, or Elo.
-- Run one canary before any batch. Keep model, transport, and fixture constant while diagnosing.
-- Screenshots and video are evidence. A process exit or result JSON is not.
-- Do not revive `legacy/`, `archive/`, or any old runner.
+Automated checks establish executable facts such as object identity, spatial relationships, state transitions, traces, reset, cleanup, and evidence identity. Human pairwise review judges overall quality: A better, B better, tie, or both bad.
+
+## engineering qualification
+
+`scripts/test_flight/` contains the separate unscored qualification runner. It exercises the pinned model-output contract, bounded Studio readiness, RSC transport, nested runtime results, cleanup, and screenshot provenance on a file-backed calibration prompt.
+
+## results
+
+Run artifacts live under `results/evaluations/<fixture>/<evaluation-id>/`. They contain the generated source/fixture copies, structured evidence, screenshots, optional proof-backed video, manifests, and review packets. Historical diagnostics remain under their existing result directories.

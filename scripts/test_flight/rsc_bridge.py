@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 import json
 import math
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -17,6 +20,7 @@ STATUS_POLL_INTERVAL = 0.5
 DEFAULT_ATTACHED_TIMEOUT = 120.0
 MAX_ATTACHED_TIMEOUT = 600.0
 INSTANCE_ID_PATTERN = re.compile(r"^anon:[0-9a-f-]{36}$")
+RSC_CLI = "C:/Users/Admin/rsc/venv/Scripts/rsc.exe"
 
 
 def emit(payload: dict[str, Any]) -> None:
@@ -135,6 +139,16 @@ def discover(client: RemoteControlClient) -> tuple[str, dict[str, Any]]:
     return instance_id, discovery
 
 
+def application_result_ok(finished_result: Any) -> bool:
+    """Require transport success and, when present, nested Luau success."""
+    if not isinstance(finished_result, dict) or finished_result.get("ok") is not True:
+        return False
+    value = finished_result.get("value")
+    if isinstance(value, dict) and "success" in value:
+        return value.get("success") is True
+    return True
+
+
 def finish_job(
     client: RemoteControlClient,
     submitted: dict[str, Any],
@@ -166,7 +180,7 @@ def finish_job(
         "result": result,
     }
     finished_result = finished.get("result")
-    application_ok = isinstance(finished_result, dict) and finished_result.get("ok") is True
+    application_ok = application_result_ok(finished_result)
     response["application_ok"] = application_ok
     response["ok"] = finished.get("state") == "succeeded" and application_ok
     if artifact_dir is not None and finished.get("state") == "succeeded" and application_ok:
@@ -301,7 +315,7 @@ def run(request: dict[str, Any]) -> dict[str, Any]:
                 "run": start,
             },
         }
-    if operation not in {"exec", "eval", "screenshot"}:
+    if operation not in {"exec", "eval", "play_start", "play_stop", "logs", "screenshot", "export_build"}:
         raise ValueError(f"unsupported operation: {operation!r}")
 
     timeout = attached_timeout(request)
@@ -313,15 +327,16 @@ def run(request: dict[str, Any]) -> dict[str, Any]:
     else:
         instance_id = validate_instance_id(instance_id)
 
-    if operation in {"exec", "eval"}:
+    if operation in {"exec", "eval", "play_start", "play_stop", "logs"}:
         code = request.get("code")
-        if not isinstance(code, str) or not code:
+        if operation in {"exec", "eval"} and (not isinstance(code, str) or not code):
             raise ValueError(f"{operation} requires non-empty code")
         submitted = client.submit_attached(
             operation,
             instance_id=instance_id,
             code=code,
             target=request.get("target"),
+            arguments=request.get("arguments") or {},
             timeout=timeout,
             idempotency_key=request.get("idempotency_key"),
         )
@@ -340,6 +355,66 @@ def run(request: dict[str, Any]) -> dict[str, Any]:
             timeout=timeout,
             artifact_dir=request.get("artifact_dir"),
         )
+    elif operation == "export_build":
+        # Export through the queued attached path so the SAME connected
+        # StudioSession handles it (the worker's AttachedExecutor supports
+        # export_build). A direct `rsc call` would start a second MCP server
+        # that proxies and conflicts with the primary on 58741.
+        export_args = dict(request.get("arguments") or {})
+        if "instance_path" in export_args and "instancePath" not in export_args:
+            export_args["instancePath"] = export_args.pop("instance_path")
+        if "output_id" in export_args and "outputId" not in export_args:
+            export_args["outputId"] = export_args.pop("output_id")
+        if "instancePath" not in export_args:
+            export_args["instancePath"] = "game.Workspace.BloxBenchCandidate"
+        if "outputId" not in export_args:
+            raise ValueError("export_build requires an output_id (destination .rbxl path)")
+        submitted = client.submit_attached(
+            "export_build",
+            instance_id=instance_id,
+            arguments=export_args,
+            timeout=timeout,
+            idempotency_key=request.get("idempotency_key"),
+        )
+        response = finish_job(client, submitted, timeout=timeout)
+        # The worker returns the build JSON content base64-embedded; decode locally.
+        saved_to = ""
+        artifact_b64 = ""
+        result = ((response.get("finished") or {}).get("result") or {})
+        inner = result.get("value") if isinstance(result, dict) else None
+        if isinstance(inner, dict):
+            saved_to = inner.get("saved_to") or inner.get("savedTo") or ""
+            artifact_b64 = inner.get("artifact_b64") or ""
+        output_name = Path(str(export_args.get("outputId", "build"))).name
+        local_artifact = Path(request.get("artifact_dir") or ".") / f"{output_name}.json"
+        local_artifact.parent.mkdir(parents=True, exist_ok=True)
+        if artifact_b64:
+            local_artifact.write_bytes(base64.b64decode(artifact_b64.encode("ascii")))
+        else:
+            # Fallback: scp the build JSON from the VM.
+            if not saved_to:
+                saved_to = rf"C:\Users\Admin\.robloxstudio-mcp\build-library\{output_name}.json"
+            saved_to_clean = saved_to.replace("\\", "/")
+            ssh_pass = os.environ.get("WINDEV_SSH_PASS", "")
+            if not ssh_pass:
+                raise RuntimeError("export_build requires WINDEV_SSH_PASS to fetch the build JSON")
+            scp_cmd = [
+                "sshpass", "-p", ssh_pass, "scp",
+                "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=8",
+                f"Admin@192.168.40.250:{saved_to_clean}",
+                str(local_artifact),
+            ]
+            scp_done = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=guest_timeout)
+            if scp_done.returncode != 0:
+                raise RuntimeError(f"export_build scp failed: {scp_done.stderr[:300]}")
+        data = local_artifact.read_bytes()
+        response["artifact_path"] = str(local_artifact)
+        response["bytes"] = len(data)
+        response["export"] = {
+            "instance_path": export_args.get("instancePath"),
+            "output_id": export_args.get("outputId"),
+            "saved_to": saved_to,
+        }
     else:
         raise ValueError(f"unsupported operation: {operation!r}")
 

@@ -1,0 +1,10 @@
+You are the source-generation worker for a BloxBench Roblox evaluation.
+
+Call the provided write_source tool exactly once with the complete final plain-text Luau source. Do not return Markdown fences or an explanation.
+
+Task:
+Build an open approximately 48 by 48 stud game-level landmark scene centered on a waterfall. Create exactly one top-level Model named BloxBenchCandidate and parent every candidate object under it. Include these named semantic components: LandmarkRoot, WaterSource, WaterfallBody, ImpactPool, MistEmitter, ApproachStart, Viewpoint, WalkableRoute, and SceneBounds.
+
+The waterfall must visibly descend from WaterSource, above WaterfallBody, into ImpactPool. MistEmitter must be a real visible ParticleEmitter or an observable effect node near the pool. ApproachStart and Viewpoint must lie on a clear collidable WalkableRoute. SceneBounds must be a visible or inspectable approximately 48 by 48 stud envelope containing all focal components. Keep the scene open, readable from one fixed elevated camera, and use a few supporting rocks, path markers, vegetation, a bridge, or a service platform without burying the waterfall in unrelated detail.
+
+Create a BloxBenchRuntime Folder under the candidate with boolean attributes route_walkable=true and effect_active=true. Create a BloxBenchTrace Folder with an attribute last_event="capture" or a StringValue that records the capture event. Set BloxBenchState to a stable initial value. The parent fixture will observe the scene and effect in edit mode, then issue the capture hook. Do not create a replacement waterfall in the evaluator, use network calls, load assets, require modules, or include secrets. Use supported Roblox classes and enums only. Anchor static parts and make visible collision agree with the route.

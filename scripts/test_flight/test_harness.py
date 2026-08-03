@@ -330,6 +330,20 @@ class HarnessContractTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     HARNESS.require_luau_success(response, "test", "marker")
 
+    def test_luau_contract_accepts_runtime_eval_result_field(self) -> None:
+        runtime_eval = {
+            "finished": {
+                "state": "succeeded",
+                "result": {
+                    "value": {"ok": True, "result": json.dumps({"marker": "runtime-marker"})}
+                },
+            }
+        }
+        self.assertIs(
+            HARNESS.require_luau_success(runtime_eval, "runtime eval", "runtime-marker"),
+            runtime_eval,
+        )
+
     def test_live_arm_rejects_a_local_screenshot_hash_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as raw_dir:
             flight_dir = Path(raw_dir) / "flight"

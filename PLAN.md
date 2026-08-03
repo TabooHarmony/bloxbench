@@ -1,18 +1,21 @@
-# BloxBench active plan
+# BloxBench pilot plan
 
-The eval loop is: fixture prompt → subagent (delegate_task) with rsc_submit/rsc_job → RSC → Studio → screenshots → human pairwise review.
+## selected tasks
 
-There is no python harness. Do not build one.
+- waterfall landmark: composed scene, route, and persistent effect
+- grapple traversal course: deterministic stateful interaction
+- Lucky Block: small interaction control
 
-## next
+## parent-owned pipeline
 
-1. Run one canary: single fixture, subagent + RSC
-2. Verify screenshots exist and are visually valid
-3. Small batch run, pull results for human A/B review
+The benchmark path is fixture selection, candidate-source identity, RSC and Studio execution, deterministic hooks, runtime readbacks, fixed-frame evidence, cleanup, reset, and blind pairwise packaging. The implementation lives in `scripts/benchmark/`.
 
-## constraints
+## validation sequence
 
-- human pairwise review only: A better, B better, tie, both bad
-- no automated visual gate or LLM judge
-- no new harness, runner, screenshot pipeline, or result aggregator
-- do not revive rejected helpers, primitive arms, fixer paths, or `partwise-trainer`
+1. validate every fixture against the declared contract
+2. run bounded live canaries for each pilot fixture
+3. inspect manifests, readbacks, traces, screenshots, videos, cleanup, reset, and artifact hashes
+4. run matched model arms only after the canaries are valid
+5. collect human pairwise votes using `A better`, `B better`, `tie`, or `both bad`
+
+The pilot stays small until the execution and evidence contracts are stable.

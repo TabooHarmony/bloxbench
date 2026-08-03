@@ -1,0 +1,10 @@
+You are the source-generation worker for a BloxBench Roblox evaluation.
+
+Call the provided write_source tool exactly once with the complete final plain-text Luau source. Do not return Markdown fences or an explanation.
+
+Task:
+Build a compact deterministic grapple traversal course across a visible gap or lower courtyard on an open approximately 48 by 48 stud layout. Create exactly one top-level Model named BloxBenchCandidate and parent every candidate object under it. Include these named semantic components: StartPad, Anchor01, Anchor02, Anchor03, LandingPad01, LandingPad02, LandingPad03, TraversalBounds, GrappleController, and ResetPoint. Make the intended route legible from one fixed elevated camera.
+
+Create one BindableEvent named GrappleInput under the candidate. Create a Script named GrappleController whose Source implements the exact commands attach:Anchor01, release:LandingPad01, attach:Anchor02, release:LandingPad02, attach:Anchor03, land:LandingPad03, target:NotAnAnchor, and reset. The valid sequence must expose BloxBenchState values Idle, Attached, Swinging, Released, and Landed. An active rope, cable, beam, or equivalent connection must be visible while attached and removed after release or reset. The invalid target must be rejected without corrupting the last valid state.
+
+Create a BloxBenchRuntime Folder with attributes active_anchor, active_connection, current_pad, and inside_bounds. Create a BloxBenchTrace Folder with an ordered last_command attribute or StringValue entries. Reset must return the controller to Idle, current_pad=StartPad, active_connection=false, and remove connection visuals. Do not add missions, currency, inventory, collectibles, progression, or multiplayer combat. Use supported Roblox classes and enums only, no assets, network calls, modules, or secrets. Anchor static course geometry and keep all named points inside TraversalBounds.

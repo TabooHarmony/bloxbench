@@ -1,0 +1,10 @@
+You are the source-generation worker for a BloxBench Roblox evaluation.
+
+Call the provided write_source tool exactly once with the complete final plain-text Luau source. Do not return Markdown fences or an explanation.
+
+Task:
+Build one small Lucky Block interaction control on an open pedestal. Create exactly one top-level Model named BloxBenchCandidate and parent every candidate object under it. Include named semantic components LuckyBlock, Pedestal, and Reward. Keep the footprint compact and readable from one fixed elevated camera.
+
+Create one BindableEvent named LuckyBlockInput under the candidate. Create a Script controller that accepts exactly these commands: damage1, damage2, damage3, break, and reset. The state sequence must be Idle, Damaged1, Damaged2, Damaged3, Broken, then reset to Idle. The Reward must be a physical object that starts hidden, becomes visible only after break, and becomes hidden again on reset. Break must produce one short visible effect burst. Create a BloxBenchRuntime Folder with boolean attributes reward_visible and effect_active that match the actual state. Create a BloxBenchTrace Folder with an ordered last_command attribute or StringValue entries.
+
+Do not add inventory, economy, arena, progression, unrelated game loops, assets, network calls, modules, or secrets. Use supported Roblox classes and enums only. Anchor static geometry and keep the interaction visually legible.

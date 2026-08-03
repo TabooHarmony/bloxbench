@@ -203,13 +203,14 @@ def git_metadata(path: Path) -> dict[str, Any]:
     return metadata
 
 
-def build_provenance() -> dict[str, Any]:
+def build_provenance(prompt_path: Path = CALIBRATION_PROMPT) -> dict[str, Any]:
     """Describe every source and repository revision that can affect a flight."""
     return {
         "launcher_sha256": sha256_file(Path(__file__).resolve()),
         "bridge_sha256": sha256_file(BRIDGE),
         "extension_sha256": sha256_file(EXTENSION),
-        "calibration_prompt_sha256": sha256_file(CALIBRATION_PROMPT),
+        "prompt_sha256": sha256_file(prompt_path),
+        "prompt_path": str(prompt_path.relative_to(ROOT)),
         "place_sha256": sha256_file(PLACE),
         "bloxbench": git_metadata(ROOT),
         "rsc": git_metadata(RSC_PROJECT),
@@ -304,6 +305,46 @@ def compact_pi_event(event: dict[str, Any]) -> dict[str, Any]:
                 },
             }
     return event
+
+
+def empty_usage_totals() -> dict[str, int | float]:
+    return {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "total_tokens": 0,
+        "cost_input": 0,
+        "cost_output": 0,
+        "cost_cache_read": 0,
+        "cost_cache_write": 0,
+        "cost_total": 0,
+    }
+
+
+def add_usage_totals(total: dict[str, int | float], usage: dict[str, Any]) -> None:
+    for destination, source in {
+        "input_tokens": "input",
+        "output_tokens": "output",
+        "cache_read_tokens": "cacheRead",
+        "cache_write_tokens": "cacheWrite",
+        "total_tokens": "totalTokens",
+    }.items():
+        value = usage.get(source)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            total[destination] += value
+    cost = usage.get("cost")
+    if isinstance(cost, dict):
+        for destination, source in {
+            "cost_input": "input",
+            "cost_output": "output",
+            "cost_cache_read": "cacheRead",
+            "cost_cache_write": "cacheWrite",
+            "cost_total": "total",
+        }.items():
+            value = cost.get(source)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                total[destination] += value
 
 
 def tool_result_is_error(event: dict[str, Any]) -> bool | None:
@@ -417,6 +458,7 @@ def run_pi(
     arm_dir: Path,
     max_output_tokens: int,
     *,
+    prompt: str,
     timeout_seconds: float = PI_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     worker_dir = arm_dir / "worker"
@@ -428,7 +470,7 @@ def run_pi(
     pi_dir.mkdir(parents=True, exist_ok=True)
     (arm_dir / "source").mkdir(parents=True, exist_ok=True)
     write_json(pi_dir / "models.json", model_config(max_output_tokens))
-    (arm_dir / "prompt.txt").write_text(PROMPT, encoding="utf-8")
+    (arm_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
     command = pi_command(model["id"])
     write_json(
         arm_dir / "pi-command.json",
@@ -473,6 +515,11 @@ def run_pi(
     event_counts: dict[str, int] = {}
     tool_calls: list[dict[str, Any]] = []
     pi_errors: list[str] = []
+    usage_totals = empty_usage_totals()
+    assistant_messages = 0
+    turn_starts = 0
+    first_message_timestamp: int | float | None = None
+    last_message_timestamp: int | float | None = None
     event_log_bytes = 0
     abort_reason: str | None = None
     deadline = time.monotonic() + timeout_seconds
@@ -494,7 +541,7 @@ def run_pi(
         assert process.stdout is not None
         try:
             process.stdin.write(
-                json.dumps({"id": "flight-prompt", "type": "prompt", "message": PROMPT}) + "\n"
+                json.dumps({"id": "flight-prompt", "type": "prompt", "message": prompt}) + "\n"
             )
             process.stdin.flush()
         except (BrokenPipeError, OSError):
@@ -531,8 +578,27 @@ def run_pi(
             event_log_bytes += serialized_bytes
             event_type = str(event.get("type", "unknown"))
             event_counts[event_type] = event_counts.get(event_type, 0) + 1
-            error_message = event.get("errorMessage")
+            if event_type == "turn_start":
+                turn_starts += 1
             message = event.get("message")
+            if event_type == "message_end" and isinstance(message, dict) and message.get("role") == "assistant":
+                assistant_messages += 1
+                raw_usage = message.get("usage")
+                if isinstance(raw_usage, dict):
+                    add_usage_totals(usage_totals, raw_usage)
+                timestamp = message.get("timestamp")
+                if isinstance(timestamp, (int, float)):
+                    first_message_timestamp = (
+                        timestamp
+                        if first_message_timestamp is None
+                        else min(first_message_timestamp, timestamp)
+                    )
+                    last_message_timestamp = (
+                        timestamp
+                        if last_message_timestamp is None
+                        else max(last_message_timestamp, timestamp)
+                    )
+            error_message = event.get("errorMessage")
             if not isinstance(error_message, str) and isinstance(message, dict):
                 error_message = message.get("errorMessage")
             if isinstance(error_message, str) and error_message and error_message not in pi_errors:
@@ -585,6 +651,9 @@ def run_pi(
 
     source_entries = sorted((arm_dir / "source").iterdir(), key=lambda path: path.name)
     files = [path for path in source_entries if path.is_file()]
+    elapsed_seconds: float | None = None
+    if first_message_timestamp is not None and last_message_timestamp is not None:
+        elapsed_seconds = round((last_message_timestamp - first_message_timestamp) / 1000.0, 3)
     result = {
         "process_returncode": process.returncode,
         "settled": settled,
@@ -595,6 +664,11 @@ def run_pi(
         "event_counts": event_counts,
         "tool_calls": tool_calls,
         "pi_errors": pi_errors,
+        "usage": usage_totals,
+        "usage_available": assistant_messages > 0 and usage_totals["total_tokens"] > 0,
+        "assistant_messages": assistant_messages,
+        "rounds": turn_starts or assistant_messages,
+        "elapsed_seconds": elapsed_seconds,
         "source_files": [str(path) for path in files],
         "source_entries": [str(path) for path in source_entries],
         "event_log_format": "compact-jsonl",
@@ -736,10 +810,17 @@ def require_luau_success(
     finished = response["finished"]
     result = finished.get("result")
     value = result.get("value") if isinstance(result, dict) else None
-    if not isinstance(value, dict) or value.get("success") is not True:
+    success = isinstance(value, dict) and (
+        value.get("success") is True or (
+            value.get("ok") is True and isinstance(value.get("result"), str)
+        )
+    )
+    if not success:
         raise RuntimeError(f"{label} returned a failed Luau result: {json.dumps(response, sort_keys=True)}")
     if expected_marker is not None:
         raw_return = value.get("returnValue")
+        if raw_return is None:
+            raw_return = value.get("result")
         try:
             returned = json.loads(raw_return) if isinstance(raw_return, str) else None
         except json.JSONDecodeError as exc:
@@ -878,6 +959,8 @@ def run_arm(
     arm: str,
     flight_dir: Path,
     *,
+    prompt: str,
+    prompt_path: Path,
     source_only: bool = False,
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     provenance: dict[str, Any] | None = None,
@@ -895,9 +978,10 @@ def run_arm(
         "model": model["id"],
         "model_name": model["name"],
         "pi_version": "0.83.0",
-        "calibration_prompt": str(CALIBRATION_PROMPT.relative_to(ROOT)),
+        "prompt_path": str(prompt_path.relative_to(ROOT)),
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
         "place": str(PLACE.relative_to(ROOT)),
-        "calibration_prompt_mode": "file-backed",
+        "prompt_mode": "file-backed",
         "thinking": "high",
         "max_output_tokens": max_output_tokens,
         "candidate_has_rsc_access": False,
@@ -910,7 +994,7 @@ def run_arm(
     sequence = 0
     instance_id: str | None = None
     try:
-        pi_result = run_pi(model, arm_dir, max_output_tokens)
+        pi_result = run_pi(model, arm_dir, max_output_tokens, prompt=prompt)
         manifest["pi"] = pi_result
         terminal_ok = pi_result.get("terminal_ok")
         process_ok = pi_result.get("process_returncode") == 0 or (
@@ -1144,10 +1228,10 @@ def run_arm(
         )
 
 
-def validate_runtime_inputs(*, source_only: bool) -> None:
+def validate_runtime_inputs(*, source_only: bool, prompt_path: Path) -> None:
     required_files = [
         ("Pi executable", PI),
-        ("calibration prompt", CALIBRATION_PROMPT),
+        ("prompt file", prompt_path),
         ("place file", PLACE),
         ("Pi output extension", EXTENSION),
     ]
@@ -1206,17 +1290,27 @@ def main() -> int:
         help="run only this model arm; omit to run both arms",
     )
     parser.add_argument(
+        "--prompt-file",
+        type=Path,
+        default=CALIBRATION_PROMPT,
+        help="task-specific source-generation prompt; default is the legacy calibration prompt",
+    )
+    parser.add_argument(
         "--max-output-tokens",
         type=int,
         default=DEFAULT_MAX_OUTPUT_TOKENS,
         help="per-request output/reasoning ceiling (default: 16000)",
     )
     args = parser.parse_args()
+    prompt_path = args.prompt_file.resolve()
+    prompt = prompt_path.read_text(encoding="utf-8")
+    if not prompt.strip():
+        parser.error("--prompt-file must not be empty")
     if args.max_output_tokens < 1 or args.max_output_tokens > MAX_MAX_OUTPUT_TOKENS:
         parser.error(f"--max-output-tokens must be between 1 and {MAX_MAX_OUTPUT_TOKENS}")
     arms = (args.arm,) if args.arm else ("flash", "pro")
-    validate_runtime_inputs(source_only=args.source_only)
-    provenance = build_provenance()
+    validate_runtime_inputs(source_only=args.source_only, prompt_path=prompt_path)
+    provenance = build_provenance(prompt_path)
 
     with shutdown_signal_handler(), flight_lock(ROOT / "results"):
         flight_dir = create_flight_dir(ROOT / "results")
@@ -1230,14 +1324,14 @@ def main() -> int:
                 "base_url": BASE_URL,
                 "models": {arm: item["id"] for arm, item in MODELS.items()},
                 "arms": list(arms),
-                "calibration_prompt": str(CALIBRATION_PROMPT.relative_to(ROOT)),
+                "prompt_path": str(prompt_path.relative_to(ROOT)),
                 "place": str(PLACE.relative_to(ROOT)),
                 "pi_version": "0.83.0",
                 "thinking": "high",
                 "max_output_tokens": args.max_output_tokens,
                 "studio_execution": "not-run" if args.source_only else "parent-owned",
-                "calibration_prompt_mode": "file-backed",
-                "prompt_sha256": hashlib.sha256(PROMPT.encode("utf-8")).hexdigest(),
+                "prompt_mode": "file-backed",
+                "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
                 "provenance": provenance,
                 "credential_source": "process environment HYPER_API_KEY",
                 "started_at": utc_now(),
@@ -1252,6 +1346,8 @@ def main() -> int:
                     run_arm(
                         arm,
                         flight_dir,
+                        prompt=prompt,
+                        prompt_path=prompt_path,
                         source_only=args.source_only,
                         max_output_tokens=args.max_output_tokens,
                         provenance=provenance,

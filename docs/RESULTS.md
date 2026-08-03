@@ -1,26 +1,40 @@
-# Results and Artifact Policy
+# BloxBench results and artifact policy
 
 ## canonical locations
 
-Benchmark output is operator data, not source:
+Benchmark output is operator data:
 
 ```text
-results/                 eval output (screenshots, logs)
+results/<run-id>/
 ```
 
-This path is ignored by git. Do not commit screenshots, result JSON, or API responses.
+A run directory may contain source identity, fixture and place identity, operation records, readbacks, traces, screenshots, attached videos, cleanup/reset records, manifests, and human-review packets.
 
-## preserving a run
+## rejected historical packet
 
-For a run worth keeping:
+The historical drawbridge packet at:
 
-1. keep screenshots, result metadata, and relevant logs together under `results/<run_id>/`
-2. record the configuration (model, fixture, transport) alongside the artifacts
+```text
+results/human-review-drawbridge-final-20260803/
+```
 
-## review
+is preserved for audit but is **not** a human-review packet. It has no generated
+candidate place, its sources are synthetic canaries rather than model arms, and
+its desktop-level videos have no verified viewport-only capture proof. No human
+quality label exists.
 
-1. confirm the run configuration matches the comparison target
-2. inspect screenshots manually
-3. pairwise vote: A better, B better, tie, both bad
+The replacement evaluation bundle contract is under `results/evaluations/` and
+requires model-generation provenance, a generated `.rbxl`/`.rbxlx` place,
+named screenshots, structured readbacks/traces, and optional videos only when a
+matching viewport-only proof is present.
 
-A successful process exit is not construction quality. Screenshots are the evidence.
+## review sequence
+
+1. validate the fixture and candidate source identity
+2. inspect the complete manifest and operation results
+3. inspect readbacks, traces, screenshots, and video
+4. verify cleanup, reset, and evidence hashes
+5. create a blind pairwise packet from two distinct valid runs
+6. record one of `A better`, `B better`, `tie`, or `both bad`
+
+A successful process exit is an execution fact. Human pairwise review is the quality decision. The withdrawn drawbridge packet is historical pipeline evidence only, not a model-quality conclusion.

@@ -95,6 +95,27 @@ class BridgeContractTests(unittest.TestCase):
         response = BRIDGE.finish_job(client, {"id": "job-1"}, timeout=1)
         self.assertFalse(response["ok"])
 
+    def test_finish_job_rejects_outer_success_with_nested_luau_failure(self) -> None:
+        class NestedFailureClient:
+            def wait(self, job_id: str, *, timeout: float) -> dict[str, object]:
+                return {
+                    "state": "succeeded",
+                    "result": {
+                        "ok": True,
+                        "value": {"success": False, "message": "compile error"},
+                    },
+                }
+
+            def job(self, operation: str, job_id: str) -> dict[str, object]:
+                return {"ok": True}
+
+        response = BRIDGE.finish_job(NestedFailureClient(), {"id": "job-1"}, timeout=1)
+        self.assertFalse(response["application_ok"])
+        self.assertFalse(response["ok"])
+
+    def test_application_result_without_nested_success_is_transport_only(self) -> None:
+        self.assertTrue(BRIDGE.application_result_ok({"ok": True, "value": {"message": "started"}}))
+
     def test_finish_job_exec_path_returns_nested_success_without_artifact_fetch(self) -> None:
         client = SuccessClient()
         response = BRIDGE.finish_job(client, {"id": "job-1"}, timeout=1)
@@ -124,6 +145,31 @@ class BridgeContractTests(unittest.TestCase):
                         "code": "return 1",
                     }
                 )
+
+    def test_run_accepts_playtest_operations_with_arguments(self) -> None:
+        client = Mock()
+        client.submit_attached.return_value = {"id": "job-play"}
+        finished = {"ok": True, "finished": {"state": "succeeded", "result": {"ok": True}}}
+        with patch.object(BRIDGE, "RemoteControlClient", return_value=client), patch.object(
+            BRIDGE, "finish_job", return_value=finished
+        ):
+            response = BRIDGE.run(
+                {
+                    "operation": "play_start",
+                    "instance_id": "anon:00000000-0000-0000-0000-000000000000",
+                    "arguments": {"mode": "play"},
+                }
+            )
+        self.assertTrue(response["ok"])
+        client.submit_attached.assert_called_once_with(
+            "play_start",
+            instance_id="anon:00000000-0000-0000-0000-000000000000",
+            code=None,
+            target=None,
+            arguments={"mode": "play"},
+            timeout=BRIDGE.DEFAULT_ATTACHED_TIMEOUT,
+            idempotency_key=None,
+        )
 
     def test_status_uses_a_bounded_guest_timeout(self) -> None:
         fake_client = Mock()

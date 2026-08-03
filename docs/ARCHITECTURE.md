@@ -1,25 +1,30 @@
-# Architecture
+# BloxBench architecture
 
-## eval loop
+## execution flow
 
+```text
+fixture metadata and prompt
+  -> fixture contract validation
+  -> candidate Luau source and source identity
+  -> parent-owned review runner
+  -> RSC bridge
+  -> Roblox Studio edit or play runtime
+  -> scene and game hooks
+  -> deterministic commands and readbacks
+  -> fixed-frame viewport screenshots and optional proof-backed video
+  -> cleanup, reset, manifest, and review packet
+  -> blind human pairwise review
 ```
-fixture prompt
-  → subagent (model under test)
-    → rsc_submit / rsc_job (iterative tool use)
-      → RSC worker → Studio
-    → screenshots via RSC
-  → human pairwise A/B review
-```
-
-There is no python harness, no MCP stdio client, no hand-rolled LLM loop. The subagent IS the loop. RSC IS the transport.
 
 ## components
 
-- **Fixtures** (`Evals/`): prompts, rubrics, metadata, setup/check functions. The dataset.
-- **Subagents**: hermes `delegate_task`. The model under test gets the prompt and iterates with RSC tools.
-- **RSC** (`/root/roblox-studio-control`): durable job control, Studio lifecycle, screenshots.
-- **Human review**: pairwise comparison. A better, B better, tie, both bad.
+- **Fixtures** (`Evals/`): prompts, semantic components, deterministic states, hooks, evidence declarations, and reset/cleanup contracts.
+- **Fixture contract** (`scripts/benchmark/fixture_contract.py`): parses metadata and rejects incomplete or non-pairwise fixture declarations.
+- **Review runner** (`scripts/benchmark/review_runner.py`): owns the execution sequence and evidence manifest. It does not score beauty or fun.
+- **RSC** (`/root/roblox-studio-control`): owns the Studio control plane, durable jobs, runtime operations, and artifact capture.
+- **Qualification runner** (`scripts/test_flight/`): separate engineering coverage for transport, readiness, result-shape, cleanup, and calibration provenance.
+- **Pairwise packet** (`scripts/benchmark/pairwise_packet.py`): creates anonymized A/B artifacts and preserves internal identity mapping for later audit.
 
-## what was removed
+## protocol boundary
 
-The old `harness.py` (2000+ lines, MCP stdio client, hand-rolled LLM loop, screenshot pipeline) was archived on 2026-07-30 to `archive/harness-2026-07-30/`. It was built before RSC existed and duplicated everything RSC and hermes already provide.
+Outer RSC transport success is not application success. The bridge validates nested Luau or runtime results before the runner records an operation as successful. Every reviewable run carries source, fixture, place, operation, screenshot, video, and manifest identity metadata.
