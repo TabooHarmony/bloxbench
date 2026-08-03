@@ -5,7 +5,7 @@
 -- @states capture
 -- @runtime mode=edit
 -- @evidence static=required video=optional trace=required reset=required review=human-pairwise
--- @screenshot type=scene angles=1 primary=hero
+-- @screenshot type=scene angles=3 primary=hero
 -- @judge_rubric focal="waterfall landmark" relationships="source body pool route"
 
 local eval = {}
