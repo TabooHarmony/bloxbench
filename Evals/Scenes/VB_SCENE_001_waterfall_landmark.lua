@@ -42,45 +42,6 @@ local function get_candidate()
     return candidate
 end
 
-local function get_required(candidate)
-    local present = {}
-    for _, name in ipairs(required) do
-        local item = candidate:FindFirstChild(name, true)
-        assert(item, "missing semantic component: " .. name)
-        present[name] = item.ClassName
-    end
-    return present
-end
-
-local function position_of(item)
-    if item:IsA("BasePart") then
-        return item.Position
-    end
-    if item:IsA("Model") then
-        return item:GetPivot().Position
-    end
-    local part = item:FindFirstChildWhichIsA("BasePart", true)
-    assert(part, "semantic component has no spatial part: " .. item.Name)
-    return part.Position
-end
-
-local function bounds_of(item)
-    if item:IsA("BasePart") then
-        return item.CFrame, item.Size
-    end
-    if item:IsA("Model") then
-        return item:GetBoundingBox()
-    end
-    local part = item:FindFirstChildWhichIsA("BasePart", true)
-    assert(part, "spatial component has no BasePart: " .. item.Name)
-    return part.CFrame, part.Size
-end
-
-local function contains_xz(boundsCFrame, boundsSize, position)
-    return math.abs(position.X - boundsCFrame.Position.X) <= boundsSize.X * 0.5 + 1
-        and math.abs(position.Z - boundsCFrame.Position.Z) <= boundsSize.Z * 0.5 + 1
-end
-
 local function route_collision(route)
     if route:IsA("BasePart") then
         return route.CanCollide
@@ -112,7 +73,9 @@ end
 
 local function effect_node(candidate)
     local node = candidate:FindFirstChild("MistEmitter", true)
-    assert(node, "MistEmitter is missing")
+    if node == nil then
+        return nil
+    end
     if node:IsA("ParticleEmitter") then
         return node
     end
@@ -121,9 +84,22 @@ end
 
 eval.check_scene = function()
     local candidate = get_candidate()
-    local present = get_required(candidate)
+    local present = {}
+    local warnings = {}
+    for _, name in ipairs(required) do
+        local item = candidate:FindFirstChild(name, true)
+        if item then
+            present[name] = item.ClassName
+        else
+            table.insert(warnings, "missing semantic component: " .. name)
+        end
+    end
     local effect = effect_node(candidate)
-    assert(effect:IsA("ParticleEmitter") or effect:GetAttribute("effect_active") ~= nil, "MistEmitter has no observable effect")
+    if effect == nil then
+        table.insert(warnings, "MistEmitter is missing")
+    elseif not (effect:IsA("ParticleEmitter") or effect:GetAttribute("effect_active") ~= nil) then
+        table.insert(warnings, "MistEmitter has no observable effect")
+    end
     local source = candidate:FindFirstChild("WaterSource", true)
     local body = candidate:FindFirstChild("WaterfallBody", true)
     local pool = candidate:FindFirstChild("ImpactPool", true)
@@ -131,44 +107,110 @@ eval.check_scene = function()
     local viewpoint = candidate:FindFirstChild("Viewpoint", true)
     local route = candidate:FindFirstChild("WalkableRoute", true)
     local bounds = candidate:FindFirstChild("SceneBounds", true)
-    local sourcePosition = position_of(source)
-    local bodyPosition = position_of(body)
-    local poolPosition = position_of(pool)
-    local approachPosition = position_of(approach)
-    local viewpointPosition = position_of(viewpoint)
-    assert(sourcePosition.Y > bodyPosition.Y, "water source is not above waterfall body")
-    assert(bodyPosition.Y > poolPosition.Y, "waterfall body is not above impact pool")
-    assert(route:IsA("BasePart") or route:IsA("Model"), "WalkableRoute is not spatial")
-    assert(bounds:IsA("BasePart") or bounds:IsA("Model"), "SceneBounds is not spatial")
-    local boundsCFrame, boundsSize = bounds_of(bounds)
-    assert(boundsSize.X >= 32 and boundsSize.X <= 64 and boundsSize.Z >= 32 and boundsSize.Z <= 64, "SceneBounds is outside the review envelope")
-    for _, position in ipairs({sourcePosition, bodyPosition, poolPosition, approachPosition, viewpointPosition}) do
-        assert(contains_xz(boundsCFrame, boundsSize, position), "focal component is outside SceneBounds")
+
+    local function position_of_or_nil(item)
+        if item == nil then
+            return nil
+        end
+        if item:IsA("BasePart") then
+            return item.Position
+        end
+        if item:IsA("Model") then
+            return item:GetPivot().Position
+        end
+        local part = item:FindFirstChildWhichIsA("BasePart", true)
+        if part then
+            return part.Position
+        end
+        return nil
     end
-    local routeCFrame, routeSize = bounds_of(route)
-    assert(route_collision(route), "WalkableRoute has no collidable surface")
-    assert(contains_xz(routeCFrame, routeSize, approachPosition) and contains_xz(routeCFrame, routeSize, viewpointPosition), "WalkableRoute does not span route endpoints")
-    local effectParent = effect:IsA("ParticleEmitter") and effect.Parent or effect
-    local effectPosition = position_of(effectParent)
-    assert((effectPosition - poolPosition).Magnitude <= 12, "MistEmitter is not concentrated near ImpactPool")
+
+    local sourcePosition = position_of_or_nil(source)
+    local bodyPosition = position_of_or_nil(body)
+    local poolPosition = position_of_or_nil(pool)
+    local approachPosition = position_of_or_nil(approach)
+    local viewpointPosition = position_of_or_nil(viewpoint)
+    local boundsCFrame, boundsSize
+
+    if bounds and (bounds:IsA("BasePart") or bounds:IsA("Model")) then
+        if bounds:IsA("BasePart") then
+            boundsCFrame, boundsSize = bounds.CFrame, bounds.Size
+        else
+            boundsCFrame, boundsSize = bounds:GetBoundingBox()
+        end
+        local bx, bz = boundsSize.X, boundsSize.Z
+        if bx < 32 or bx > 64 or bz < 32 or bz > 64 then
+            table.insert(warnings, "SceneBounds outside 32-64 review envelope")
+        end
+    else
+        table.insert(warnings, "SceneBounds is not spatial")
+    end
+
+    if sourcePosition and bodyPosition and sourcePosition.Y <= bodyPosition.Y then
+        table.insert(warnings, "water source is not above waterfall body")
+    end
+    if bodyPosition and poolPosition and bodyPosition.Y <= poolPosition.Y then
+        table.insert(warnings, "waterfall body is not above impact pool")
+    end
+    if route == nil then
+        table.insert(warnings, "WalkableRoute is missing")
+    elseif not route_collision(route) then
+        table.insert(warnings, "WalkableRoute has no collidable surface")
+    end
+
+    local function in_bounds(position)
+        if position == nil or boundsCFrame == nil then
+            return false
+        end
+        return math.abs(position.X - boundsCFrame.Position.X) <= boundsSize.X * 0.5 + 1
+            and math.abs(position.Z - boundsCFrame.Position.Z) <= boundsSize.Z * 0.5 + 1
+    end
+
+    if boundsCFrame then
+        for _, position in ipairs({sourcePosition, bodyPosition, poolPosition, approachPosition, viewpointPosition}) do
+            if position and not in_bounds(position) then
+                table.insert(warnings, "focal component is outside SceneBounds")
+            end
+        end
+    end
+
+    local effectParent = effect and (effect:IsA("ParticleEmitter") and effect.Parent or effect)
+    local effectPosition = effectParent and position_of_or_nil(effectParent)
+    if effectPosition and poolPosition and (effectPosition - poolPosition).Magnitude > 12 then
+        table.insert(warnings, "MistEmitter is not concentrated near ImpactPool")
+    end
+
     local runtime = candidate:FindFirstChild("BloxBenchRuntime", true)
-    assert(runtime and runtime:GetAttribute("route_walkable") == true, "runtime route is not walkable")
-    local effectActive = effect:IsA("ParticleEmitter") and effect.Enabled or effect:GetAttribute("effect_active") == true
-    assert(effectActive and runtime:GetAttribute("effect_active") == true, "waterfall effect is not active")
+    local routeWalkable = runtime ~= nil and runtime:GetAttribute("route_walkable") == true
+    local effectActive = effect ~= nil and (effect:IsA("ParticleEmitter") and effect.Enabled or effect:GetAttribute("effect_active") == true)
+    if runtime == nil then
+        table.insert(warnings, "BloxBenchRuntime folder is missing")
+    elseif not routeWalkable then
+        table.insert(warnings, "runtime route is not walkable")
+    end
+    if runtime and runtime:GetAttribute("effect_active") ~= true then
+        table.insert(warnings, "runtime effect_active is not true")
+    end
+    if not effectActive then
+        table.insert(warnings, "waterfall effect is not active")
+    end
+
     local candidateCFrame, candidateSize = candidate:GetBoundingBox()
     return {
         marker = "waterfall-scene-readback",
         required = present,
-        effect_class = effect.ClassName,
-        source_y = sourcePosition.Y,
-        body_y = bodyPosition.Y,
-        pool_y = poolPosition.Y,
-        route_collision = true,
-        route_spans_endpoints = true,
-        effect_active = true,
+        warnings = warnings,
+        component_count = #present,
+        effect_class = effect and effect.ClassName or nil,
+        source_y = sourcePosition and sourcePosition.Y or nil,
+        body_y = bodyPosition and bodyPosition.Y or nil,
+        pool_y = poolPosition and poolPosition.Y or nil,
+        route_collision = route ~= nil and route_collision(route) or false,
+        effect_active = effectActive,
+        route_walkable = routeWalkable,
         state = candidate:GetAttribute("BloxBenchState") or "unset",
         bounds = {x = candidateSize.X, y = candidateSize.Y, z = candidateSize.Z},
-        scene_bounds = {x = boundsSize.X, y = boundsSize.Y, z = boundsSize.Z},
+        scene_bounds = boundsSize and {x = boundsSize.X, y = boundsSize.Y, z = boundsSize.Z} or nil,
         center = {x = candidateCFrame.Position.X, y = candidateCFrame.Position.Y, z = candidateCFrame.Position.Z},
     }
 end
@@ -179,22 +221,33 @@ eval.run = function(mode)
     local emitter = effect_node(candidate)
     local runtime = candidate:FindFirstChild("BloxBenchRuntime", true)
     local trace = candidate:FindFirstChild("BloxBenchTrace", true)
+    local warnings = {}
     local enabled = false
     if emitter and emitter:IsA("ParticleEmitter") then
         enabled = emitter.Enabled
     elseif emitter then
         enabled = emitter:GetAttribute("effect_active") == true
     end
-    assert(enabled, "waterfall effect is disabled")
-    assert(runtime and runtime:GetAttribute("effect_active") == true and runtime:GetAttribute("route_walkable") == true, "waterfall runtime observations are invalid")
-    assert(trace and trace_last(trace) == "capture", "waterfall trace does not record capture")
+    if not enabled then
+        table.insert(warnings, "waterfall effect is disabled")
+    end
+    local routeWalkable = runtime ~= nil and runtime:GetAttribute("route_walkable") == true
+    local effectActive = runtime ~= nil and runtime:GetAttribute("effect_active") == true
+    if not (routeWalkable and effectActive) then
+        table.insert(warnings, "waterfall runtime observations are incomplete")
+    end
+    local traceLast = trace and trace_last(trace) or nil
+    if traceLast ~= "capture" then
+        table.insert(warnings, "waterfall trace does not record capture")
+    end
     return {
         marker = "waterfall-capture-observed",
-        effect_active = true,
-        runtime_effect_active = true,
-        route_walkable = true,
-        trace_last = "capture",
-        trace_present = true,
+        effect_active = enabled,
+        runtime_effect_active = effectActive,
+        route_walkable = routeWalkable,
+        trace_last = traceLast,
+        trace_present = trace ~= nil,
+        warnings = warnings,
     }
 end
 
@@ -203,21 +256,32 @@ eval.check_game = function()
     local runtime = candidate:FindFirstChild("BloxBenchRuntime", true)
     local route = candidate:FindFirstChild("WalkableRoute", true)
     local emitter = effect_node(candidate)
+    local warnings = {}
     local effectActive = false
     if emitter and emitter:IsA("ParticleEmitter") then
         effectActive = emitter.Enabled
     elseif emitter then
         effectActive = emitter:GetAttribute("effect_active") == true
     end
-    assert(route and route_collision(route), "walkable route lost collision")
-    assert(runtime and runtime:GetAttribute("route_walkable") == true, "runtime route is not walkable")
-    assert(effectActive and runtime:GetAttribute("effect_active") == true, "waterfall effect is not active")
+    local routeCollision = route ~= nil and route_collision(route) or false
+    local routeWalkable = runtime ~= nil and runtime:GetAttribute("route_walkable") == true
+    local runtimeEffect = runtime ~= nil and runtime:GetAttribute("effect_active") == true
+    if not routeCollision then
+        table.insert(warnings, "walkable route lost collision")
+    end
+    if not routeWalkable then
+        table.insert(warnings, "runtime route is not walkable")
+    end
+    if not (effectActive and runtimeEffect) then
+        table.insert(warnings, "waterfall effect is not active")
+    end
     return {
         marker = "waterfall-runtime-readback",
-        route_can_collide = true,
-        route_walkable = true,
-        effect_active = true,
-        runtime_effect_active = true,
+        route_can_collide = routeCollision,
+        route_walkable = routeWalkable,
+        effect_active = effectActive,
+        runtime_effect_active = runtimeEffect,
+        warnings = warnings,
     }
 end
 

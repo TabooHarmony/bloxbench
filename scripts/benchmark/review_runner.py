@@ -684,12 +684,13 @@ def run_review(
         setup_payload = run.require_luau(setup, "fixture setup", "bloxbench-hook")
         run.manifest["readbacks"]["setup"] = setup_payload
 
+        source_text = source_path.read_text(encoding="utf-8")
         execution = run.bridge(
             {
                 "operation": "exec",
                 "instance_id": run.instance_id,
                 "target": "edit",
-                "code": f'''local ok, value = xpcall(function()\n{source_path.read_text(encoding="utf-8")}\nend, function(err) return debug.traceback(tostring(err), 2) end)\nassert(ok, value)\nreturn {{marker = "bloxbench-candidate-executed"}}\n''',
+                "code": f'''local ok, value = xpcall(function()\n{source_text}\nend, function(err) return debug.traceback(tostring(err), 2) end)\nassert(ok, value)\nlocal rs = game:GetService("ReplicatedStorage")\nlocal old = rs:FindFirstChild("_BloxBenchCandidateCode")\nif old then old:Destroy() end\nlocal module = Instance.new("ModuleScript")\nmodule.Name = "_BloxBenchCandidateCode"\nmodule.Source = {lua_long_string(source_text)}\nmodule.Parent = rs\nlocal candidateModule = require(module)\nassert(type(candidateModule) == "table", "candidate module must return a table")\nif type(candidateModule.setup) == "function" then\n    local setupOk, setupValue = xpcall(candidateModule.setup, function(err) return debug.traceback(tostring(err), 2) end)\n    assert(setupOk, "candidate setup failed: " .. tostring(setupValue))\nend\nreturn {{marker = "bloxbench-candidate-executed", ran_setup = true}}\n''',
                 "timeout": 300,
             },
             timeout=360,
