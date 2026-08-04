@@ -77,7 +77,8 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(result.state, "completed_unexported")
             self.assertEqual(result.evidence_state, "static evidence complete; generated place missing")
             self.assertNotIn("play_start", calls)
-            self.assertEqual(calls.count("screenshot"), 2)
+            expected_screenshots = 1 + len(fixture.states or ["capture"]) * fixture.screenshot_angles
+            self.assertEqual(calls.count("screenshot"), expected_screenshots)
             manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["state"], "completed_unexported")
             self.assertEqual(manifest["place"]["generated"], False)
