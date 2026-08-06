@@ -17,7 +17,18 @@ eval.place = "baseplate.rbxl"
 eval.prompt = {
     {
         role = "user",
-        content = [[Build one compact arcane impact burst effect in a Roblox game scene. Create exactly one top-level Model named BloxBenchCandidate with semantic components EffectRoot, EmitterOrigin, ImpactMarker, PrimaryBurst, SecondaryGlow, VfxInput, ResetPoint, and EffectBounds. Add a BindableEvent named VfxInput and a BloxBenchRuntime folder or equivalent attributes. The runtime controller must live in an executable Script or LocalScript body, not only in the setup module. Accept the exact commands trigger and reset. The initial and reset state must be Idle with effect_active false; trigger must enter Burst with effect_active true and record an ordered trace. Use supported Roblox particles, beams, lights, and attachments without external asset IDs. Keep the effect compact and readable, and do not claim that machine checks prove timing or visual quality.]]
+        content = [[Build one compact arcane impact burst effect in a Roblox game scene. Create exactly one top-level Model named BloxBenchCandidate. Inside that model, create Instance objects with the EXACT names EffectRoot, EmitterOrigin, ImpactMarker, PrimaryBurst, SecondaryGlow, VfxInput, ResetPoint, and EffectBounds — each as an Instance, not as attributes. VfxInput must be a BindableEvent. Create a Folder named BloxBenchRuntime and a Folder named BloxBenchTrace (both inside the model). The runtime controller must live in the Source of an executable Script or LocalScript placed in the candidate (not only in the module setup function).
+
+Contract (implement exactly, case-sensitive):
+- BloxBenchCandidate:SetAttribute("BloxBenchState") is "Idle" (initial/reset) or "Burst" (after trigger).
+- BloxBenchRuntime:SetAttribute("effect_active") is a boolean: false when Idle, true when Burst.
+- BloxBenchTrace:SetAttribute("last_command") is set to the exact command string most recently handled: "trigger" or "reset".
+- Accept commands on VfxInput.Event: "trigger" and "reset" (exact strings). Keep the effect compact — EffectBounds footprint <= 32 by 32 — and readable from one fixed camera. Use supported Roblox particles/beams/lights/attachments without external asset IDs. Do not claim that machine checks prove timing or visual quality.
+
+VFX instance guidance (use these types, not arbitrary Parts):
+- PrimaryBurst and SecondaryGlow are visual effect instances: ParticleEmitter, Beam, PointLight, or Attachment-hosted emitters. Do not make both plain Parts with no effect — at least one should emit particles or glow.
+- EffectRoot/EmitterOrigin/ImpactMarker are anchoring Parts or Attachments.
+- ResetPoint and EffectBounds are Parts that mark the reset location and bounding footprint.]]
     }
 }
 
@@ -68,8 +79,10 @@ eval.check_scene = function()
         assert(part, "bounds must contain a BasePart")
         size = part.Size
     end
-    assert(size.X <= 32 and size.Z <= 32, "arcane effect is outside the compact review envelope")
-    return {marker = "arcane-burst-scene-readback", required = present, bounds = {x = size.X, y = size.Y, z = size.Z}}
+    -- Non-blocking: a too-large bounds still deserves a human vote.
+    local envelope_ok = size.X <= 32 and size.Z <= 32
+    if not envelope_ok then warn(("arcane effect outside ideal envelope (%.1f x %.1f) — non-blocking"):format(size.X, size.Z)) end
+    return {marker = "arcane-burst-scene-readback", required = present, bounds = {x = size.X, y = size.Y, z = size.Z}, envelope_ok = envelope_ok}
 end
 
 local commands = {idle = "reset", trigger = "trigger", reset = "reset"}

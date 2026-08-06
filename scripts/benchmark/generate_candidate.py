@@ -110,25 +110,29 @@ def system_prompt_with_cheatsheet(profile: str = DEFAULT_KNOWLEDGE_PROFILE) -> s
 def make_prompt(fixture) -> str:
     rubric_lines = [f"- {key}: {value}" for key, value in fixture.rubric.items()]
     rubric = "\n".join(rubric_lines) or "none"
+    components = ", ".join(fixture.semantic_components)
+    states_line = f"States: {', '.join(fixture.states)}" if fixture.states else "States: none (static scene)"
+    runtime_line = f"Runtime: {fixture.runtime}" + (" (play — needs Script/LocalScript with BindableEvent commands)" if fixture.runtime == "play" else " (edit — static build)")
     return f"""You are generating Roblox Luau source for a benchmark fixture.
 
 Scenario: {fixture.scenario_name}
-
+{runtime_line}
+Required semantic components (EXACT Instance names inside BloxBenchCandidate): {components}
+{states_line}
 The evaluator will load your source as a ModuleScript and call these hooks
 when present: {", ".join(fixture.hooks) or "none"}.
 
-The final build must follow this contract:
-- create exactly one top-level Model named `{fixture.candidate_root}` in workspace;
-- honor the fixture's semantic components and states;
-- report runtime facts through BloxBenchState / BloxBenchRuntime attributes
-  or folders so the evaluator can read them back;
+The final build MUST:
+- create exactly one top-level Model named `{fixture.candidate_root}` in workspace and put ALL components inside it;
+- create an Instance for EVERY name in the required list above (Instance.new with the exact Name, not an Attribute);
+- for play fixtures, set attributes exactly as the prompt specifies (BloxBenchState on the model, booleans on the BloxBenchRuntime folder, last_command on BloxBenchTrace) and handle commands in a Script/LocalScript Source — not only in setup;
 - use only supported Roblox classes and enums.
 
-Here is the full user prompt from the fixture:
+Authoritative task prompt (follow this verbatim — it contains the exact attribute names, command strings, and envelope guidance):
 
 {fixture.prompt}
 
-Rubric (for your own reference on what reviewers weight):
+Rubric (what human reviewers weight — not a machine gate):
 {rubric}
 
 Write the complete Luau source and nothing else.

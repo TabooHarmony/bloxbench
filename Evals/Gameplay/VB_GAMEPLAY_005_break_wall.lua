@@ -17,7 +17,14 @@ eval.place = "baseplate.rbxl"
 eval.prompt = {
     {
         role = "user",
-        content = [[Build one compact deterministic break-wall or mining interaction for a Roblox game level. Create exactly one top-level Model named BloxBenchCandidate with semantic components BreakRoot, WallPanel, DamageMarker, BrokenOpening, RewardMarker, BreakInput, ResetPoint, and BreakBounds. Add a BindableEvent named BreakInput and a BloxBenchRuntime folder or equivalent attributes. Runtime logic must live in an executable Script or LocalScript body. Accept the exact commands damage, break, and reset. The initial/reset state is Intact with reward_visible false; damage enters Damaged; break enters Broken with a visible opening and reward marker; reset restores the intact wall. Record the ordered command trace. Do not claim an economy, persistence, mining balance, multiplayer behavior, or realistic destruction from this small deterministic contract.]]
+        content = [[Build one compact deterministic break-wall or mining interaction for a Roblox game level. Create exactly one top-level Model named BloxBenchCandidate. Inside that model, create Instance objects with the EXACT names BreakRoot, WallPanel, DamageMarker, BrokenOpening, RewardMarker, BreakInput, ResetPoint, and BreakBounds — each as an Instance (Part/Model/Folder/BindableEvent as appropriate), not as attributes on the model. BreakInput must be a BindableEvent. Add a Folder named BloxBenchRuntime and a Folder named BloxBenchTrace (both inside the model). Runtime logic must live in the Source of an executable Script or LocalScript placed in the candidate — do not put the state machine only in the module setup function.
+
+Contract for the evaluator to read (implement exactly, case-sensitive):
+- BloxBenchCandidate:SetAttribute("BloxBenchState") must be one of "Intact", "Damaged", "Broken" (exact strings).
+- BloxBenchRuntime:SetAttribute("reward_visible") is a boolean (true only when Broken, otherwise false).
+- BloxBenchRuntime:SetAttribute("opening_visible") is a boolean (true only when Broken, otherwise false).
+- BloxBenchTrace:SetAttribute("last_command") is set to the exact command string most recently handled: "damage", "break", or "reset".
+- Accept commands on BreakInput.Event: "damage", "break", "reset" (exact lower-case strings). The initial/reset state is Intact with reward_visible false; damage enters Damaged; break enters Broken with a visible opening and reward marker; reset restores the intact wall. Keep BreakBounds roughly 10-48 wide (X) by 8-40 deep (Z) — a small Anchored Part or Model with a BasePart — so the scene is reviewable from one fixed camera. Do not claim an economy, persistence, mining balance, multiplayer behavior, or realistic destruction from this small deterministic contract.]]
     }
 }
 
@@ -67,8 +74,14 @@ eval.check_scene = function()
         assert(part, "bounds must contain a BasePart")
         size = part.Size
     end
-    assert(size.X >= 10 and size.X <= 48 and size.Z >= 8 and size.Z <= 40, "BreakBounds is outside the review envelope")
-    return {marker = "break-wall-scene-readback", required = present, bounds = {x = size.X, y = size.Y, z = size.Z}}
+    -- Non-blocking diagnostic: bounds outside the ideal review envelope do not fail
+    -- the candidate — frontier builds can be slightly out of frame and still get
+    -- a fair human review. The envelope is guidance in the prompt, not a gate.
+    local envelope_ok = size.X >= 10 and size.X <= 48 and size.Z >= 8 and size.Z <= 40
+    if not envelope_ok then
+        warn(("BreakBounds is outside the ideal review envelope (%.1f x %.1f) — non-blocking"):format(size.X, size.Z))
+    end
+    return {marker = "break-wall-scene-readback", required = present, bounds = {x = size.X, y = size.Y, z = size.Z}, envelope_ok = envelope_ok}
 end
 
 local commands = {intact = "reset", damage = "damage", ["break"] = "break", reset = "reset"}

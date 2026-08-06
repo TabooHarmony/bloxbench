@@ -1,5 +1,4 @@
 ROBLOX CORE KNOWLEDGE PROFILE v1
-
 Use documented Roblox APIs and the exact task contract. This profile is shared public context, not a quality score.
 
 EXECUTION MODEL
@@ -15,7 +14,15 @@ API DISCIPLINE
 - ParticleEmitter effects are normally parented to an Attachment or BasePart. Do not assign read-only properties.
 - Preserve the task's requested capability. This profile does not prohibit UI, animation, VFX, audio, input, Humanoids, rigs, physics, services, or client/server code. Use the task-specific rules when those capabilities are required.
 
-BENCHMARK CONVENTION
+BENCHMARK CONTRACT CONVENTIONS (authoritative for BloxBench)
+- Semantic components are Instance objects with EXACT names (e.g. BreakBounds, SceneRoot, RewardPanel) placed inside the single top-level Model BloxBenchCandidate. A component is NOT an Attribute on the model — it must be an Instance you create with Instance.new and Parent = model (or descendant). The evaluator finds them with FindFirstChild(name, true).
+- For play/runtime fixtures, state and readback live at fixed keys the evaluator reads:
+  * BloxBenchCandidate:SetAttribute("BloxBenchState", stateString) — exact case-sensitive values named in the task (e.g. Intact/Damaged/Broken, Idle/Burst).
+  * BloxBenchRuntime folder (or descendant): attributes like reward_visible, opening_visible, effect_active are SetAttribute on that folder with boolean values.
+  * BloxBenchTrace folder (or descendant): attribute last_command (or last_event) set to the exact command string just handled ("damage","break","reset","trigger", ...). One attribute, updated on every command.
+  Do not invent attribute names like State, Trace, RewardVisible.
+- Bounds instances (BreakBounds, SceneBounds, DisplayBounds, UiBounds, EffectBounds) declare the review footprint. Keep them roughly: BreakBounds ~10-48 wide, 8-40 deep; SceneBounds 24-64 square; DisplayBounds 8-36 wide, 6-30 deep; UiBounds 8-40 wide, 2-28 deep; EffectBounds <=32 square (compact). X and Z are the floor footprint; Y/thickness can be small. Staying in these windows keeps the build reviewable from one fixed camera — it is not a quality score.
+- UI fixtures are world-space: WorldAnchor and UiBounds are Parts; RewardPanel/DayProgress/ClaimedState/AvailableState/PrimaryAction/CalendarIcon are GuiObjects (Frame/TextLabel/TextButton/ImageLabel) inside a BillboardGui or SurfaceGui whose Adornee is WorldAnchor. Do not make every UI name a Part.
 - Keep the candidate under the declared root instance and use the exact semantic names from the task.
 - Expose only the narrow state/readback contract requested by the task. Runtime observations explain the result; they do not establish visual or gameplay quality.
 - Do not add unrelated systems merely to inflate the artifact.

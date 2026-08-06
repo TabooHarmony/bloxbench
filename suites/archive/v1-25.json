@@ -1,7 +1,7 @@
 {
   "expected_task_count": 25,
   "schema": "bloxbench-suite-v1",
-  "sha256": "b5188aa646f34c0853846bf24968481cd0e25fec82eece1af93666c74410c3fd",
+  "sha256": "3fd6cafa887c761c5af0baf4ffece2cbeed56d1d26b40165f3c7ef7fef929580",
   "suite_id": "v1",
   "suite_version": "1.0",
   "task_count": 25,
@@ -45,7 +45,7 @@
         "origin": "hand-authored"
       },
       "runtime": "play",
-      "sha256": "8e6e07fd60f6203d5be27acd312dfbdff33f5f8b029b3240d268afecd6f6d2e7",
+      "sha256": "3d5515fa4a317705df08a19998a21dedc8f43ab935156b3b7a47a66a941de548",
       "track": "gameplay"
     },
     {
@@ -89,7 +89,7 @@
         "record": "a020-car-place,a021-car-crash-system"
       },
       "runtime": "edit",
-      "sha256": "5e7ddbce90b7bedddd99de24e36f2db7d19f57e20475c041cceb79254ef5c2d6",
+      "sha256": "6ffb9b22cb9aef5523784366a8bbf8ba622712158b29c12b9ecacc3fb569f14c",
       "track": "building"
     },
     {
@@ -112,7 +112,7 @@
         "record": "a016-build-a-plane,a017-build-a-plane"
       },
       "runtime": "edit",
-      "sha256": "60098b96a02fe105585b4878da87a8a78a129d283e4f05a4b23af890557db564",
+      "sha256": "f00ad5ef98350ad25bf541b8388a55b281f6dd6ed46bfc567f97cf12987a1f45",
       "track": "building"
     },
     {
@@ -135,7 +135,7 @@
         "record": "a054-hiddenville-gun-system,a055-hood-gun-system"
       },
       "runtime": "edit",
-      "sha256": "5755015bfbdb3cc8f4098766cbb779642be7513f61e3717613c42e034cab922a",
+      "sha256": "d4fad7e51f5673fd866d04b062c7ea22de656b6ed64329ae85eb6a627f707937",
       "track": "building"
     },
     {
@@ -158,7 +158,7 @@
         "record": "a026-combat-omega,a047-gag-v8,a048-garden-horizons"
       },
       "runtime": "edit",
-      "sha256": "92537a2c8a9e6db5cd8c87c1c7e402315462e6721cd9c16d4c4b7bbaf8aec427",
+      "sha256": "dde842f55458e6d2607afc0feae2d546da1399eb913af3372b043c4c9ff33d15",
       "track": "building"
     },
     {
@@ -181,7 +181,7 @@
         "record": "watchtower-relation-pilot"
       },
       "runtime": "edit",
-      "sha256": "56d54ce6f4656fe49a36912c158479970f93a4bcfd7cc2f0f6e28b0ebf09b4f6",
+      "sha256": "47af5a88525266b22898b65789dbf9542c77082d50e139da2a91055dc8314431",
       "track": "building"
     },
     {
@@ -204,7 +204,7 @@
         "record": "a124-crossfire-ffa,a046-fully-working-fps-game,a109-sniper-game"
       },
       "runtime": "play",
-      "sha256": "af2dfeeec36e14b3150e964a67cadba0d5832091d6a027bedfd1941877c1c1b0",
+      "sha256": "d30cdfbd866e435254b0878ee6b6f61204e57da587bf45b695b2852612746580",
       "track": "gameplay"
     },
     {
@@ -227,7 +227,7 @@
         "record": "a021-car-crash-system,a020-car-place"
       },
       "runtime": "play",
-      "sha256": "f1d62da35a7e4b465bf5dbb4ff04c4d430f2804a113bf28b6d8c756ace70f4a7",
+      "sha256": "55c30981d3377d99b97c692b56a67b8aa7a5acd0979f14e2355d1760355176d3",
       "track": "gameplay"
     },
     {
@@ -243,14 +243,14 @@
       "knowledge_profile": "roblox-core-v1",
       "path": "Evals/Gameplay/VB_GAMEPLAY_005_break_wall.lua",
       "place": "baseplate.rbxl",
-      "prompt_sha256": "59454ee4afcb748c55c90114372b13892f5b549d421c0b78635b849cc6db1301",
+      "prompt_sha256": "a7e7cc5bdc38db384ae7b2e16b75e9c3920340529c7e70084a2450353964de4e",
       "provenance": {
         "license": "unknown",
         "origin": "corpus-derived gameplay brief",
         "record": "a126-break-wall-simulator,a067-mine-a-template,a119-mine-a-template"
       },
       "runtime": "play",
-      "sha256": "c4e2b0ab25c99074809c949e4e6de1050cb4c9a22225ed93a2572c0ba689ec4b",
+      "sha256": "73b4a3e927ffacb9ee6940e371b45af4d0f9047d74b10d983eada23228caec2a",
       "track": "gameplay"
     },
     {
@@ -273,7 +273,7 @@
         "record": "a006-ai-test,urban-shop-patterns"
       },
       "runtime": "edit",
-      "sha256": "5c60db0cfcabda148149dc4d954397ce048e2dafb1748cc1c87663e534f54000",
+      "sha256": "abb96890c8825b8f5f31fd89deb80703752937bef5c9a589eae90c198a2478c4",
       "track": "scene"
     },
     {
@@ -296,7 +296,7 @@
         "record": "a032-deepwoken,a052-hellverse,a053-hellverse"
       },
       "runtime": "edit",
-      "sha256": "f5688cbf2cb242f2de64aea3b15d843ebb07861a45efdd4caf7e3240bbf6f295",
+      "sha256": "0aa7c44807482c5fb1850d7d2cd2ed4fbe0fb5b99556eca2e81df0d135133b74",
       "track": "scene"
     },
     {
@@ -319,7 +319,7 @@
         "record": "a009-map-evidence,a010-map-evidence,a011-map-evidence,a012-map-evidence"
       },
       "runtime": "edit",
-      "sha256": "5c04842cc91c4a2f634192c8a4f016f22a3c412819e8935930f85d70bdee3c5c",
+      "sha256": "88588c128bd9a011438b6c5517e68f9ca65227d1ea29b7fb2c82eead214f2a2c",
       "track": "scene"
     },
     {
@@ -335,14 +335,14 @@
       "knowledge_profile": "roblox-core-v1",
       "path": "Evals/Scenes/VB_SCENE_005_disaster_room.lua",
       "place": "baseplate.rbxl",
-      "prompt_sha256": "6f8d817040a59f557ac02a9ff0bae2993bb6209894baf42af1981186b7f10af5",
+      "prompt_sha256": "4623c7e37cd0dedc75ab3e22b6e7e752a879a1fc8baeac972c03908d21f67341",
       "provenance": {
         "license": "unknown",
         "origin": "corpus-derived design brief",
         "record": "a075-op-file-escape-tsunami,a081-pu-escape-tsunami,a113-survive-lava-for-cars"
       },
       "runtime": "edit",
-      "sha256": "f77ec2675a65323d9145014f6c3c6ba685b36800522c00d6b81dcd365fa51c70",
+      "sha256": "55e12e5309b16a34a6f720d16688ee9ae70d78ef0119eb7dad662398bc645395",
       "track": "scene"
     },
     {
@@ -365,7 +365,7 @@
         "record": "a001-40-pet-system,a022-charactercustom,a023-clickerkit"
       },
       "runtime": "edit",
-      "sha256": "b8ce1bb95461c84d94b65bee02f9096f82f947d3a7b0b75163ceb0ee0250c507",
+      "sha256": "44d36271b3f62279765e2a4e60c9e5f8430728e68356fac97756dd0f4f002105",
       "track": "ui"
     },
     {
@@ -381,14 +381,14 @@
       "knowledge_profile": "roblox-core-v1",
       "path": "Evals/UI/VB_UI_002_daily_reward.lua",
       "place": "baseplate.rbxl",
-      "prompt_sha256": "b098bea2cc01b35fecbdf9f2cda9e25ceca3323828bb072529d343b1e9c2da4f",
+      "prompt_sha256": "2d6e28bd851408eb0ed750ba72d0b55c7ff44f7338ee85ead62a05dc3dd4ef58",
       "provenance": {
         "license": "unknown",
         "origin": "corpus-derived interface brief",
         "record": "a096-reward-screen-by-arnavdabest,reward-pattern-corpus"
       },
       "runtime": "edit",
-      "sha256": "02e2338a1fb1c45ad22a426812ae38fee905b0c0e4c925b93c49b30c18475806",
+      "sha256": "f0436377b6ff149f786001c658ddab7df823e631485f389d7d02a4a45cd27dc9",
       "track": "ui"
     },
     {
@@ -411,7 +411,7 @@
         "record": "trade-inventory-patterns,a001-40-pet-system"
       },
       "runtime": "edit",
-      "sha256": "d2f318c36d540506e5c67fa646648e89e76b718e1ff051b7a0774fc8ba162a0e",
+      "sha256": "4ac6ecc569f270bc7d07f8108486b7137972d62249d2ac5cea17cf3a73eb9e40",
       "track": "ui"
     },
     {
@@ -434,7 +434,7 @@
         "record": "a103-settings-topbar,a056-invitefriendtopbar"
       },
       "runtime": "edit",
-      "sha256": "34627fefcd7633a330dd31d5f82dad0d38192b1c0cb55cbd754d9d93ce253564",
+      "sha256": "ac5ac19de71d15b879bf03dcfd232ffaa22b76e8b4176f0f699264efb8cecbaa",
       "track": "ui"
     },
     {
@@ -457,7 +457,7 @@
         "record": "a049-gtagunshopsystem,a115-tycoonwithrebirths-1,a123-youtube-simulator-fixed-working"
       },
       "runtime": "edit",
-      "sha256": "a889fb219e97e58691cc422220e6e902247a4dc6b873ceaad8fbd84677674430",
+      "sha256": "869613a76b3622a4b5202a89541e6ea53569d87d0762786f1cf7af2e22d18d64",
       "track": "ui"
     },
     {
@@ -473,14 +473,14 @@
       "knowledge_profile": "roblox-core-v1",
       "path": "Evals/VFX/VB_VFX_001_arcane_burst.lua",
       "place": "baseplate.rbxl",
-      "prompt_sha256": "d168052a37822806b3e89e701abade62d0f5dc1f0dbeaada785bc8db79fb195a",
+      "prompt_sha256": "eca91ad1d435809eada5916602046ea8b968db1418a51a28e143ff86a1b1aee6",
       "provenance": {
         "license": "unknown",
         "origin": "corpus-derived effect brief",
         "record": "a124-crossfire-ffa,particle-emitter-patterns"
       },
       "runtime": "play",
-      "sha256": "b05e787e947561ab4c54640edef9ec142b5d53ee69e15f8167d74bea8741c002",
+      "sha256": "3b66189a85c75ba13563e33ab36fef8a21f220696d326d8de205a24f552d1032",
       "track": "vfx"
     },
     {
@@ -503,7 +503,7 @@
         "record": "lightning-pattern-corpus"
       },
       "runtime": "play",
-      "sha256": "11480d17bc939ee9d5c26d8c4c76135e99ee749061e6ca8110ca775fe2b79a1a",
+      "sha256": "e4744e3b14df2e6b0d85aff7349a0ae718d0c0c228923e038fd2a24d81062a66",
       "track": "vfx"
     },
     {
@@ -526,7 +526,7 @@
         "record": "a006-ai-test,a061-kaizen,a116-type-soul"
       },
       "runtime": "play",
-      "sha256": "d5fe9aa953549297a9e9b48227bd9785149055088fe2b332327d8b550a43ee54",
+      "sha256": "c0b9e12c8a94e80859c9f36d638ab4d0fb6c9074de0dc06f7138169ac8ffbbce",
       "track": "vfx"
     },
     {
@@ -549,7 +549,7 @@
         "record": "a005-advanced-gun-system-3-0,a094-realistic-advanced-gun-system"
       },
       "runtime": "play",
-      "sha256": "730d942b94f15282617fcb90e9bb695acfda1272cf388983afaaf6212cb041a7",
+      "sha256": "c8bf0b60ac92f4a6594c7993c14a75477eab6412e46ee66851b770f82c970ee7",
       "track": "vfx"
     },
     {
@@ -572,7 +572,7 @@
         "record": "a013-brainrot-rng-v1-0,a097-rng-1,a118-upd-6-gamzzs-rng-1"
       },
       "runtime": "play",
-      "sha256": "0a33b7a840255e63c9d386c45cbcfffe1e35bd539363b453a28c8f8790dbf0c1",
+      "sha256": "5787b451e585270898329942531ced106dbd91d98a8930eccde349a0d43bedcb",
       "track": "vfx"
     }
   ]

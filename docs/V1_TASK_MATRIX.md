@@ -1,6 +1,6 @@
 # BloxBench v1 task matrix
 
-This is the active v1 diagnostic suite of five tasks, one per family. Membership is locked by `suites/v1.json`, suite version `1.0`, manifest SHA-256 `2e5bfc9ec267b32503792835433e862b23c52e0e7014e4f93208a3e6d1dc50cd`. The benchmark lock is `suites/v1.lock.json`, SHA-256 `79a12ce3dc7bfe5ab6e6e8f89f8a1b37d2fa0d99d`.
+This is the active v1 diagnostic suite of five tasks, one per family. Membership is locked by `suites/v1.json`, suite version `1.0`, manifest SHA-256 `8921bd2e27e7ee844df708f6690be741f57c9444b67749942befe15058882932`. The benchmark lock is `suites/v1.lock.json`, SHA-256 `09e7351c6d592bee41f13f0f0bef9559323e9e3f9ec978af89459bed741f0d53`.
 
 The broader 25-task selection matrix remains archived at `suites/archive/v1-25.json` (and `suites/v1-25.json`) for later expansion. The active five were chosen as the simplest diagnostic representative per family with the highest prior signal for producing a reviewable `.rbxl` place file. The matrix deliberately keeps every v1 task on `Places/baseplate.rbxl`. The attached Studio runner does not yet load arbitrary starter places. UI tasks use world-space `SurfaceGui`/`BillboardGui` artifacts inside the candidate model, not hidden `PlayerGui` state. Screenshots remain diagnostic; human pairwise review of the place file is the holistic quality signal. v1 is direct one-shot only — no external fixer and no agentic self-repair in the score.
 

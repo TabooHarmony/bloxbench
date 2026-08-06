@@ -1,7 +1,7 @@
 {
   "expected_task_count": 5,
   "schema": "bloxbench-suite-v1",
-  "sha256": "2e5bfc9ec267b32503792835433e862b23c52e0e7014e4f93208a3e6d1dc50cd",
+  "sha256": "8921bd2e27e7ee844df708f6690be741f57c9444b67749942befe15058882932",
   "suite_id": "v1",
   "suite_version": "1.0",
   "task_count": 5,
@@ -26,7 +26,7 @@
         "record": "a020-car-place,a021-car-crash-system"
       },
       "runtime": "edit",
-      "sha256": "5e7ddbce90b7bedddd99de24e36f2db7d19f57e20475c041cceb79254ef5c2d6",
+      "sha256": "6ffb9b22cb9aef5523784366a8bbf8ba622712158b29c12b9ecacc3fb569f14c",
       "track": "building"
     },
     {
@@ -42,14 +42,14 @@
       "knowledge_profile": "roblox-core-v1",
       "path": "Evals/Gameplay/VB_GAMEPLAY_005_break_wall.lua",
       "place": "baseplate.rbxl",
-      "prompt_sha256": "59454ee4afcb748c55c90114372b13892f5b549d421c0b78635b849cc6db1301",
+      "prompt_sha256": "a7e7cc5bdc38db384ae7b2e16b75e9c3920340529c7e70084a2450353964de4e",
       "provenance": {
         "license": "unknown",
         "origin": "corpus-derived gameplay brief",
         "record": "a126-break-wall-simulator,a067-mine-a-template,a119-mine-a-template"
       },
       "runtime": "play",
-      "sha256": "c4e2b0ab25c99074809c949e4e6de1050cb4c9a22225ed93a2572c0ba689ec4b",
+      "sha256": "73b4a3e927ffacb9ee6940e371b45af4d0f9047d74b10d983eada23228caec2a",
       "track": "gameplay"
     },
     {
@@ -65,14 +65,14 @@
       "knowledge_profile": "roblox-core-v1",
       "path": "Evals/Scenes/VB_SCENE_005_disaster_room.lua",
       "place": "baseplate.rbxl",
-      "prompt_sha256": "6f8d817040a59f557ac02a9ff0bae2993bb6209894baf42af1981186b7f10af5",
+      "prompt_sha256": "4623c7e37cd0dedc75ab3e22b6e7e752a879a1fc8baeac972c03908d21f67341",
       "provenance": {
         "license": "unknown",
         "origin": "corpus-derived design brief",
         "record": "a075-op-file-escape-tsunami,a081-pu-escape-tsunami,a113-survive-lava-for-cars"
       },
       "runtime": "edit",
-      "sha256": "f77ec2675a65323d9145014f6c3c6ba685b36800522c00d6b81dcd365fa51c70",
+      "sha256": "55e12e5309b16a34a6f720d16688ee9ae70d78ef0119eb7dad662398bc645395",
       "track": "scene"
     },
     {
@@ -88,14 +88,14 @@
       "knowledge_profile": "roblox-core-v1",
       "path": "Evals/UI/VB_UI_002_daily_reward.lua",
       "place": "baseplate.rbxl",
-      "prompt_sha256": "b098bea2cc01b35fecbdf9f2cda9e25ceca3323828bb072529d343b1e9c2da4f",
+      "prompt_sha256": "2d6e28bd851408eb0ed750ba72d0b55c7ff44f7338ee85ead62a05dc3dd4ef58",
       "provenance": {
         "license": "unknown",
         "origin": "corpus-derived interface brief",
         "record": "a096-reward-screen-by-arnavdabest,reward-pattern-corpus"
       },
       "runtime": "edit",
-      "sha256": "02e2338a1fb1c45ad22a426812ae38fee905b0c0e4c925b93c49b30c18475806",
+      "sha256": "f0436377b6ff149f786001c658ddab7df823e631485f389d7d02a4a45cd27dc9",
       "track": "ui"
     },
     {
@@ -111,14 +111,14 @@
       "knowledge_profile": "roblox-core-v1",
       "path": "Evals/VFX/VB_VFX_001_arcane_burst.lua",
       "place": "baseplate.rbxl",
-      "prompt_sha256": "d168052a37822806b3e89e701abade62d0f5dc1f0dbeaada785bc8db79fb195a",
+      "prompt_sha256": "eca91ad1d435809eada5916602046ea8b968db1418a51a28e143ff86a1b1aee6",
       "provenance": {
         "license": "unknown",
         "origin": "corpus-derived effect brief",
         "record": "a124-crossfire-ffa,particle-emitter-patterns"
       },
       "runtime": "play",
-      "sha256": "b05e787e947561ab4c54640edef9ec142b5d53ee69e15f8167d74bea8741c002",
+      "sha256": "3b66189a85c75ba13563e33ab36fef8a21f220696d326d8de205a24f552d1032",
       "track": "vfx"
     }
   ]

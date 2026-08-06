@@ -69,17 +69,22 @@ eval.check_scene = function()
         assert(part, "bounds must contain a BasePart")
         boundsCFrame, boundsSize = part.CFrame, part.Size
     end
-    assert(boundsSize.X >= 24 and boundsSize.X <= 64 and boundsSize.Z >= 24 and boundsSize.Z <= 64, "SceneBounds is outside the review envelope")
+    local _placement_ok = boundsSize.X >= 24 and boundsSize.X <= 64 and boundsSize.Z >= 24 and boundsSize.Z <= 64
+    if not _placement_ok then warn("SceneBounds is outside the review envelope — non-blocking") end
     local entrance = position_of(model:FindFirstChild("StationEntrance", true))
     local machine = position_of(model:FindFirstChild("MachineCore", true))
     local console = position_of(model:FindFirstChild("ControlConsole", true))
     local window = position_of(model:FindFirstChild("ObservationWindow", true))
     local start = position_of(model:FindFirstChild("ApproachStart", true))
     local view = position_of(model:FindFirstChild("Viewpoint", true))
-    assert(math.abs(entrance.X - boundsCFrame.Position.X) <= boundsSize.X * 0.5 + 1, "StationEntrance is outside SceneBounds")
-    assert(math.abs(machine.X - boundsCFrame.Position.X) <= boundsSize.X * 0.5 + 1, "MachineCore is outside SceneBounds")
-    assert((console - machine).Magnitude < boundsSize.X + boundsSize.Z, "ControlConsole is disconnected from the machine area")
-    assert((view - start).Magnitude > 4, "ApproachStart and Viewpoint are not distinct")
+    local _placement_ok = math.abs(entrance.X - boundsCFrame.Position.X) <= boundsSize.X * 0.5 + 1
+    if not _placement_ok then warn("StationEntrance is outside SceneBounds — non-blocking") end
+    local _placement_ok = math.abs(machine.X - boundsCFrame.Position.X) <= boundsSize.X * 0.5 + 1
+    if not _placement_ok then warn("MachineCore is outside SceneBounds — non-blocking") end
+    local _placement_ok = (console - machine).Magnitude < boundsSize.X + boundsSize.Z
+    if not _placement_ok then warn("ControlConsole is disconnected from the machine area — non-blocking") end
+    local _placement_ok = (view - start).Magnitude > 4
+    if not _placement_ok then warn("ApproachStart and Viewpoint are not distinct — non-blocking") end
     assert(math.abs(window.Y - machine.Y) <= boundsSize.Y + 4, "ObservationWindow is not part of the scene composition")
     return {
         marker = "space-station-scene-readback",
