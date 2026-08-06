@@ -903,6 +903,18 @@ def run_review(
         playing = False
         client_role: str | None = None
         if fixture.runtime == "play":
+            # Ensure no stale playtest from a previous (possibly killed) run is still
+            # holding the instance — otherwise play_start fails with "already running".
+            try:
+                stale_stop = run.bridge(
+                    {"operation": "play_stop", "instance_id": run.instance_id, "timeout": 30},
+                    timeout=45,
+                )
+                # play_stop returns ok=False when no playtest is running — that's expected
+                if not stale_stop.get("ok"):
+                    pass
+            except Exception:
+                pass
             started = run.bridge(
                 {
                     "operation": "play_start",

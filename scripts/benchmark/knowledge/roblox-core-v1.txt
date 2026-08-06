@@ -62,7 +62,7 @@ UI — WORLD-SPACE (critical for BloxBench UI fixtures)
 - Do not grant state because a local button fired. For these offline fixtures the button just sets the attribute/state locally; that's fine — but in real games server validates.
 
 VFX, PARTICLES, BEAMS, TWEEN
-- ParticleEmitter parented to Attachment or BasePart. Burst: Rate=0 then :Emit(count) with finite Lifetime. Don't assign read-only Attachment0.
+- ParticleEmitter parented to Attachment or BasePart. Burst: Rate=0 then :Emit(count) with finite Lifetime. Valid props: Enabled, Rate, Lifetime (NumberRange), Speed (NumberRange), SpreadAngle (Vector2), Acceleration, Drag, Transparency (NumberSequence), Size (NumberSequence), Color (ColorSequence), LightEmission, LightInfluence, Orientation (Enum.ParticleOrientation), LockedToPart, ZOffset, WindAffectsDrag. There is NO Direction, Velocity, or Attachment0 property — Direction is not valid and will crash. Control direction via Speed + SpreadAngle + emitter CFrame orientation, not a Direction vector. Don't assign read-only Attachment0.
 - Beam/Trail need two Attachments with stable world relation and a cleanup owner.
 - TweenService:Create(obj, TweenInfo.new(duration, EasingStyle, EasingDirection), {Property=value}):Play(); cancel/replace previous tween on state change.
 - Debris:AddItem(obj, lifetime) for simple temp lifetimes.

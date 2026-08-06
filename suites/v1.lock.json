@@ -11,7 +11,7 @@
       },
       {
         "path": "scripts/benchmark/review_runner.py",
-        "sha256": "7f7e17f4801807454a48641710651dac3d5963dc372d17e5872f3962431a0a78"
+        "sha256": "a82f1be6f0a849b7e59c08f5eeddf1e16e5e94c57dce3751c138fd72ab3d3c54"
       },
       {
         "path": "scripts/benchmark/evaluation_bundle.py",
@@ -53,11 +53,11 @@
     },
     "knowledge": [
       {
-        "content_sha256": "56bdae6a6384fe4dc8b9f51379629aa91bfeac78c278461a2e83b6f65b851dd8",
+        "content_sha256": "5fa4d3978b8d4d547edde2a9b2b7addcbd7df305c93597a8ec3aab2074a38899",
         "name": "roblox-core-v1",
         "path": "scripts/benchmark/knowledge/roblox-core-v1.txt",
-        "sha256": "5dfc0f41ced2e8bb810feb36822c0278661d17fc2ce4f9bc631d931cf5360563",
-        "system_prompt_sha256": "abd4d17929ffd91e01744251e746270a4138185561b239da34b0885a609c03f1"
+        "sha256": "e2c24ca98bc46292e6f595da30d106a507b3ff71410e6b263844a00003de4cee",
+        "system_prompt_sha256": "e365b17a125c864811193aaae75f9d4b2e9df73531678a2ce2a399f51451afbc"
       }
     ],
     "models": {
@@ -83,7 +83,7 @@
     }
   },
   "schema": "bloxbench-benchmark-lock-v1",
-  "sha256": "22a8090afcfcf9ae2a299b99b49205e1fc2e5d0745962fe06a264c519fa63b9d",
+  "sha256": "1171b7c41771fe7b3b1fd39353ebdd0e44339ca863b161b5876ba5f6250490cb",
   "suite": {
     "manifest": {
       "expected_task_count": 5,
