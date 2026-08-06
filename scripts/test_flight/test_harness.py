@@ -193,14 +193,14 @@ class HarnessContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw_dir:
             flight_dir = Path(raw_dir) / "flight"
 
-            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int) -> dict[str, object]:
+            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int, *, prompt: str) -> dict[str, object]:
                 source = arm_dir / "source" / "candidate.luau"
                 source.parent.mkdir(parents=True, exist_ok=True)
                 source.write_text("return {}\n", encoding="utf-8")
                 return {"settled": False, "process_returncode": 0, "source_files": [str(source)]}
 
             with patch.object(HARNESS, "run_pi", side_effect=fake_run_pi):
-                result = HARNESS.run_arm("flash", flight_dir, source_only=True, max_output_tokens=32)
+                result = HARNESS.run_arm("flash", flight_dir, source_only=True, max_output_tokens=32, prompt=HARNESS.PROMPT, prompt_path=HARNESS.CALIBRATION_PROMPT)
 
             self.assertEqual(result.state, "failed")
             self.assertIn("Pi process contract failed", result.error["message"])
@@ -209,14 +209,14 @@ class HarnessContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw_dir:
             flight_dir = Path(raw_dir) / "flight"
 
-            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int) -> dict[str, object]:
+            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int, *, prompt: str) -> dict[str, object]:
                 source = arm_dir / "source" / "candidate.luau"
                 source.parent.mkdir(parents=True, exist_ok=True)
                 source.write_text("return {}\n", encoding="utf-8")
                 return {"settled": True, "terminal_ok": True, "process_returncode": 17, "source_files": [str(source)]}
 
             with patch.object(HARNESS, "run_pi", side_effect=fake_run_pi):
-                result = HARNESS.run_arm("flash", flight_dir, source_only=True, max_output_tokens=32)
+                result = HARNESS.run_arm("flash", flight_dir, source_only=True, max_output_tokens=32, prompt=HARNESS.PROMPT, prompt_path=HARNESS.CALIBRATION_PROMPT)
 
             self.assertEqual(result.state, "failed")
             self.assertIn("Pi process contract failed", result.error["message"])
@@ -228,7 +228,7 @@ class HarnessContractTests(unittest.TestCase):
             (arm_dir / "source").mkdir(parents=True)
             (arm_dir / "source" / "candidate.luau").write_text("stale\n", encoding="utf-8")
             with self.assertRaises(FileExistsError):
-                HARNESS.run_arm("flash", flight_dir, source_only=True, max_output_tokens=32)
+                HARNESS.run_arm("flash", flight_dir, source_only=True, max_output_tokens=32, prompt=HARNESS.PROMPT, prompt_path=HARNESS.CALIBRATION_PROMPT)
 
     def test_preflight_reports_a_missing_extension_before_source_generation(self) -> None:
         with tempfile.TemporaryDirectory() as raw_dir:
@@ -237,13 +237,13 @@ class HarnessContractTests(unittest.TestCase):
                 HARNESS.os.environ, {"HYPER_API_KEY": "test-only"}
             ):
                 with self.assertRaisesRegex(SystemExit, "Pi output extension"):
-                    HARNESS.validate_runtime_inputs(source_only=True)
+                    HARNESS.validate_runtime_inputs(source_only=True, prompt_path=HARNESS.CALIBRATION_PROMPT)
 
     def test_run_arm_rejects_hidden_or_extra_source_entries(self) -> None:
         with tempfile.TemporaryDirectory() as raw_dir:
             flight_dir = Path(raw_dir) / "flight"
 
-            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int) -> dict[str, object]:
+            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int, *, prompt: str) -> dict[str, object]:
                 source = arm_dir / "source" / "candidate.luau"
                 source.parent.mkdir(parents=True, exist_ok=True)
                 source.write_text("return {}\n", encoding="utf-8")
@@ -251,7 +251,7 @@ class HarnessContractTests(unittest.TestCase):
                 return {"terminal_ok": True, "process_returncode": 0, "source_files": [str(source)]}
 
             with patch.object(HARNESS, "run_pi", side_effect=fake_run_pi):
-                result = HARNESS.run_arm("flash", flight_dir, source_only=True, max_output_tokens=32)
+                result = HARNESS.run_arm("flash", flight_dir, source_only=True, max_output_tokens=32, prompt=HARNESS.PROMPT, prompt_path=HARNESS.CALIBRATION_PROMPT)
 
             self.assertEqual(result.state, "failed")
             self.assertIn("source output contract failed", result.error["message"])
@@ -348,7 +348,7 @@ class HarnessContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw_dir:
             flight_dir = Path(raw_dir) / "flight"
 
-            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int) -> dict[str, object]:
+            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int, *, prompt: str) -> dict[str, object]:
                 source = arm_dir / "source" / "candidate.luau"
                 source.parent.mkdir(parents=True, exist_ok=True)
                 source.write_text("return {}\n", encoding="utf-8")
@@ -401,7 +401,7 @@ class HarnessContractTests(unittest.TestCase):
             with patch.object(HARNESS, "run_pi", side_effect=fake_run_pi), patch.object(
                 HARNESS, "bridge_call", side_effect=fake_bridge
             ):
-                result = HARNESS.run_arm("flash", flight_dir, max_output_tokens=32)
+                result = HARNESS.run_arm("flash", flight_dir, max_output_tokens=32, prompt=HARNESS.PROMPT, prompt_path=HARNESS.CALIBRATION_PROMPT)
 
             self.assertEqual(result.state, "failed")
             self.assertIn("local artifact metadata mismatch", result.error["message"])
@@ -413,7 +413,7 @@ class HarnessContractTests(unittest.TestCase):
             second_id = "anon:22222222-2222-2222-2222-222222222222"
             state = {"status_calls": 0, "bootstrap_calls": 0, "bootstrap_ids": []}
 
-            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int) -> dict[str, object]:
+            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int, *, prompt: str) -> dict[str, object]:
                 source = arm_dir / "source" / "candidate.luau"
                 source.parent.mkdir(parents=True, exist_ok=True)
                 source.write_text("return {}\n", encoding="utf-8")
@@ -467,7 +467,7 @@ class HarnessContractTests(unittest.TestCase):
             ), patch.object(HARNESS, "require_luau_success"), patch.object(
                 HARNESS, "require_screenshot_success"
             ):
-                result = HARNESS.run_arm("flash", flight_dir, max_output_tokens=32)
+                result = HARNESS.run_arm("flash", flight_dir, max_output_tokens=32, prompt=HARNESS.PROMPT, prompt_path=HARNESS.CALIBRATION_PROMPT)
 
             self.assertEqual(result.state, "completed")
             self.assertEqual(state["bootstrap_ids"], [first_id, second_id])
@@ -502,10 +502,14 @@ class HarnessContractTests(unittest.TestCase):
             "launcher_sha256",
             "bridge_sha256",
             "extension_sha256",
-            "calibration_prompt_sha256",
+            "prompt_sha256",
             "place_sha256",
+            "prompt_path",
         ):
-            self.assertRegex(provenance[key], r"^[0-9a-f]{64}$")
+            if key == "prompt_path":
+                self.assertIsInstance(provenance[key], str)
+            else:
+                self.assertRegex(provenance[key], r"^[0-9a-f]{64}$")
 
     def test_interrupted_flight_summary_preserves_partial_results(self) -> None:
         with tempfile.TemporaryDirectory() as raw_dir:
@@ -559,6 +563,7 @@ class HarnessContractTests(unittest.TestCase):
                     arm_dir,
                     max_output_tokens=32,
                     timeout_seconds=5,
+                    prompt=HARNESS.PROMPT,
                 )
             self.assertEqual(result["process_returncode"], 17)
             self.assertEqual(result["abort_reason"], "pi_process_exited")
@@ -587,6 +592,7 @@ class HarnessContractTests(unittest.TestCase):
                     arm_dir,
                     max_output_tokens=32,
                     timeout_seconds=0.3,
+                    prompt=HARNESS.PROMPT,
                 )
             elapsed = time.monotonic() - started
             self.assertEqual(result["abort_reason"], "pi_timeout")
@@ -623,6 +629,7 @@ class HarnessContractTests(unittest.TestCase):
                     root / "arm",
                     max_output_tokens=32,
                     timeout_seconds=5,
+                    prompt=HARNESS.PROMPT,
                 )
             self.assertTrue(result["settled"])
             self.assertTrue(result["terminal_ok"])
@@ -649,6 +656,7 @@ class HarnessContractTests(unittest.TestCase):
                     root / "arm",
                     max_output_tokens=32,
                     timeout_seconds=5,
+                    prompt=HARNESS.PROMPT,
                 )
             self.assertFalse(result["settled"])
             self.assertEqual(result["terminal_event"], "agent_end")
@@ -675,6 +683,7 @@ class HarnessContractTests(unittest.TestCase):
                     root / "arm",
                     max_output_tokens=32,
                     timeout_seconds=5,
+                    prompt=HARNESS.PROMPT,
                 )
             self.assertFalse(result["terminal_ok"])
             self.assertEqual(result["abort_reason"], "pi_terminal_without_valid_source")
@@ -697,6 +706,7 @@ class HarnessContractTests(unittest.TestCase):
                     root / "arm",
                     max_output_tokens=32,
                     timeout_seconds=5,
+                    prompt=HARNESS.PROMPT,
                 )
             self.assertFalse(result["terminal_ok"])
             self.assertEqual(result["abort_reason"], "pi_terminal_without_valid_source")
@@ -726,6 +736,7 @@ class HarnessContractTests(unittest.TestCase):
                     root / "arm",
                     max_output_tokens=32,
                     timeout_seconds=5,
+                    prompt=HARNESS.PROMPT,
                 )
                 self.assertEqual(HARNESS.redact_text("prefix hyper-test-secret suffix"), "prefix [REDACTED] suffix")
             keys = set(json.loads(snapshot.read_text()))
@@ -756,6 +767,7 @@ class HarnessContractTests(unittest.TestCase):
                     root / "arm",
                     max_output_tokens=32,
                     timeout_seconds=5,
+                    prompt=HARNESS.PROMPT,
                 )
             persisted = (root / "arm" / "pi.stderr").read_text(encoding="utf-8")
             self.assertNotIn("secret-token", persisted)
@@ -766,7 +778,7 @@ class HarnessContractTests(unittest.TestCase):
             flight_dir = Path(raw_dir) / "flight"
             calls: list[tuple[int, dict[str, object]]] = []
 
-            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int) -> dict[str, object]:
+            def fake_run_pi(model: dict[str, object], arm_dir: Path, max_output_tokens: int, *, prompt: str) -> dict[str, object]:
                 source = arm_dir / "source" / "candidate.luau"
                 source.parent.mkdir(parents=True, exist_ok=True)
                 source.write_text("return {}\n", encoding="utf-8")
@@ -811,7 +823,7 @@ class HarnessContractTests(unittest.TestCase):
             with patch.object(HARNESS, "run_pi", side_effect=fake_run_pi), patch.object(
                 HARNESS, "bridge_call", side_effect=fake_bridge
             ):
-                result = HARNESS.run_arm("flash", flight_dir, max_output_tokens=32)
+                result = HARNESS.run_arm("flash", flight_dir, max_output_tokens=32, prompt=HARNESS.PROMPT, prompt_path=HARNESS.CALIBRATION_PROMPT)
 
             self.assertEqual(result.state, "failed")
             self.assertIn("candidate execution", result.error["message"])

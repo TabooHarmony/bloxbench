@@ -15,7 +15,7 @@ eval.place = "baseplate.rbxl"
 eval.prompt = {
     {
         role = "user",
-        content = [[Build one small Lucky Block interaction control on an open pedestal. Create exactly one top-level Model named BloxBenchCandidate with semantic components LuckyBlock, Pedestal, and Reward. The block must support three deterministic damage stages, one break, one physical reward reveal, one short effect burst, and reset. Keep the footprint compact and readable from one fixed elevated camera. Add a BloxBenchState attribute, a BindableEvent named LuckyBlockInput, and a BloxBenchTrace or equivalent ordered event record. LuckyBlockInput must accept the exact commands damage1, damage2, damage3, break, and reset. Do not add an inventory, economy, arena, progression system, or unrelated game loop. Use only supported Roblox classes and enums.]]
+        content = [[Build one small Lucky Block interaction control on an open pedestal. Create exactly one top-level Model named BloxBenchCandidate with semantic components LuckyBlock, Pedestal, and Reward. The block must support three deterministic damage stages, one break, one physical reward reveal, one short effect burst, and reset. Put the command listener and runtime state-transition logic in an executable Script or LocalScript parented somewhere under BloxBenchCandidate; do not implement the interaction only inside setup or evaluator code. Keep the footprint compact and readable from one fixed elevated camera. Add a BloxBenchState attribute, a BindableEvent named LuckyBlockInput, and a BloxBenchTrace or equivalent ordered event record. LuckyBlockInput must accept the exact commands damage1, damage2, damage3, break, and reset. Do not add an inventory, economy, arena, progression system, or unrelated game loop. Use only supported Roblox classes and enums.]]
     }
 }
 
@@ -87,6 +87,8 @@ end
 
 eval.check_scene = function()
     local candidate = get_candidate()
+    local controller = candidate:FindFirstChildWhichIsA("Script", true) or candidate:FindFirstChildWhichIsA("LocalScript", true)
+    assert(controller, "play fixture requires executable Script or LocalScript")
     local present = {}
     local positions = {}
     for _, name in ipairs(required) do

@@ -8,6 +8,7 @@ from scripts.benchmark.fixture_contract import (
     FixtureContractError,
     discover_fixtures,
     parse_fixture,
+    resolve_starter_place,
 )
 
 
@@ -47,6 +48,15 @@ class FixtureContractTests(unittest.TestCase):
         self.assertEqual(set(fixture.hooks), {"setup", "cleanup", "check_scene", "check_game", "run"})
         self.assertIn("connected mechanism", fixture.prompt)
 
+    def test_parse_extracts_quoted_metadata_values(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "fixture.lua"
+            source = VALID.replace('focal="mechanism"', 'focal="mechanism focal"').replace('relationships="cables"', 'relationships="cables and route"')
+            path.write_text(source, encoding="utf-8")
+            fixture = parse_fixture(path)
+        self.assertEqual(fixture.rubric["focal"], "mechanism focal")
+        self.assertEqual(fixture.rubric["relationships"], "cables and route")
+
     def test_discover_rejects_duplicate_fixture_ids(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -70,12 +80,56 @@ class FixtureContractTests(unittest.TestCase):
             with self.assertRaisesRegex(FixtureContractError, "trace=required.*reset=required"):
                 parse_fixture(path)
 
+    def test_parse_accepts_future_tracks_and_repository_relative_starter_places(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "fixture.lua"
+            source = (
+                VALID
+                .replace("@track mechanism", "@track vfx")
+                .replace("static=required", "static=diagnostic")
+                .replace("@screenshot type=mechanism", "@screenshot type=ui angles=1 primary=hero purpose=diagnostic")
+                .replace('eval.place = "baseplate.rbxl"', 'eval.place = "starters/ui.rbxl"')
+                .replace("-- @judge_rubric", "-- @knowledge profile=roblox-ui-v1\n-- @candidate root=PreviewRoot\n-- @provenance origin=real-world-atlas record=game-001 license=public\n-- @judge_rubric")
+            )
+            path.write_text(source, encoding="utf-8")
+            fixture = parse_fixture(path)
+        self.assertEqual(fixture.track, "vfx")
+        self.assertEqual(fixture.screenshot_type, "ui")
+        self.assertEqual(fixture.place, "starters/ui.rbxl")
+        self.assertEqual(fixture.knowledge_profile, "roblox-ui-v1")
+        self.assertEqual(fixture.candidate_root, "PreviewRoot")
+        self.assertEqual(fixture.evidence["static"], "diagnostic")
+        self.assertEqual(fixture.provenance["origin"], "real-world-atlas")
+        self.assertEqual(fixture.provenance["record"], "game-001")
+
     def test_parse_accepts_play_fixture_without_video(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "fixture.lua"
             path.write_text(VALID, encoding="utf-8")
             fixture = parse_fixture(path)
         self.assertEqual(fixture.evidence["video"], "optional")
+
+    def test_parse_accepts_presentation_only_fixture_without_screenshots(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "fixture.lua"
+            source = VALID.replace("static=required", "static=not-applicable")
+            source = source.replace("-- @screenshot type=mechanism angles=1 primary=hero\n", "")
+            path.write_text(source, encoding="utf-8")
+            fixture = parse_fixture(path)
+        self.assertEqual(fixture.screenshot_angles, 0)
+        self.assertEqual(fixture.screenshot_type, "")
+
+    def test_resolves_repository_relative_and_legacy_starter_places(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            direct = root / "starters" / "ui.rbxl"
+            direct.parent.mkdir(parents=True)
+            direct.write_bytes(b"ui-place")
+            legacy = root / "Places" / "baseplate.rbxl"
+            legacy.parent.mkdir(parents=True)
+            legacy.write_bytes(b"baseplate")
+            self.assertEqual(resolve_starter_place(root, "starters/ui.rbxl"), direct)
+            self.assertEqual(resolve_starter_place(root, "baseplate.rbxl"), legacy)
 
     def test_parse_rejects_unknown_screenshot_primary_angle(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

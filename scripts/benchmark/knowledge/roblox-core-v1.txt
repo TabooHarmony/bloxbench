@@ -1,0 +1,21 @@
+ROBLOX CORE KNOWLEDGE PROFILE v1
+
+Use documented Roblox APIs and the exact task contract. This profile is shared public context, not a quality score.
+
+EXECUTION MODEL
+- Static construction may happen in the candidate module setup hook.
+- Runtime behavior must live in the Source of an executable Script or LocalScript placed in the candidate, unless the task explicitly defines another runtime boundary.
+- Do not put runtime listeners or state-machine transitions only in an edit-time setup function. Those connections will not survive into play.
+
+API DISCIPLINE
+- Use valid Roblox classes, properties, enums, and service APIs. Do not invent names.
+- Match exact state and component names from the task contract.
+- BasePart uses Transparency, not Visible. UI visibility belongs to GuiObject.Visible.
+- Set Size and a meaningful CFrame or Position on created parts. Set Anchored deliberately.
+- ParticleEmitter effects are normally parented to an Attachment or BasePart. Do not assign read-only properties.
+- Preserve the task's requested capability. This profile does not prohibit UI, animation, VFX, audio, input, Humanoids, rigs, physics, services, or client/server code. Use the task-specific rules when those capabilities are required.
+
+BENCHMARK CONVENTION
+- Keep the candidate under the declared root instance and use the exact semantic names from the task.
+- Expose only the narrow state/readback contract requested by the task. Runtime observations explain the result; they do not establish visual or gameplay quality.
+- Do not add unrelated systems merely to inflate the artifact.

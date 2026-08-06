@@ -10,6 +10,9 @@ from typing import Iterable
 HOOKS = ("setup", "cleanup", "check_scene", "check_game", "run")
 REQUIRED_COMMON_HOOKS = ("setup", "cleanup", "check_scene")
 SCREENSHOT_ANGLE_NAMES = ("hero", "front", "side", "rear", "top")
+IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+INSTANCE_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
+EVIDENCE_OPTIONAL_VALUES = {"optional", "required", "diagnostic", "not-applicable"}
 
 
 class FixtureContractError(ValueError):
@@ -32,6 +35,10 @@ class Fixture:
     screenshot_type: str
     screenshot_angles: int
     screenshot_primary: str
+    screenshot_purpose: str
+    knowledge_profile: str
+    candidate_root: str
+    provenance: dict[str, str]
     evidence: dict[str, str]
     rubric: dict[str, str]
 
@@ -76,7 +83,11 @@ def _csv(value: str | None) -> tuple[str, ...]:
 def _key_values(value: str | None) -> dict[str, str]:
     if not value:
         return {}
-    return {key: raw for key, raw in re.findall(r"([A-Za-z_][\w-]*)=([^\s]+)", value)}
+    values: dict[str, str] = {}
+    pattern = re.compile(r'([A-Za-z_][\w-]*)=(?:"([^"]*)"|([^\s]+))')
+    for match in pattern.finditer(value):
+        values[match.group(1)] = match.group(2) if match.group(2) is not None else match.group(3)
+    return values
 
 
 def parse_fixture(path: str | Path) -> Fixture:
@@ -101,9 +112,13 @@ def parse_fixture(path: str | Path) -> Fixture:
     runtime_values = _key_values(_comment_value("runtime", source))
     runtime = runtime_values.get("mode", "edit")
     screenshot = _key_values(_comment_value("screenshot", source))
+    knowledge = _key_values(_comment_value("knowledge", source))
+    candidate = _key_values(_comment_value("candidate", source))
+    provenance = _key_values(_comment_value("provenance", source))
     screenshot_type = screenshot.get("type", "")
+    default_screenshot_angles = "0" if not screenshot_type and evidence.get("static") == "not-applicable" else "1"
     try:
-        screenshot_angles = int(screenshot.get("angles", "1"))
+        screenshot_angles = int(screenshot.get("angles", default_screenshot_angles))
     except ValueError as exc:
         raise FixtureContractError(f"{fixture_path}: screenshot angles must be an integer") from exc
     rubric = _key_values(_comment_value("judge_rubric", source))
@@ -122,6 +137,10 @@ def parse_fixture(path: str | Path) -> Fixture:
         screenshot_type=screenshot_type,
         screenshot_angles=screenshot_angles,
         screenshot_primary=screenshot.get("primary", "hero"),
+        screenshot_purpose=screenshot.get("purpose", "diagnostic"),
+        knowledge_profile=knowledge.get("profile", "roblox-core-v1"),
+        candidate_root=candidate.get("root", "BloxBenchCandidate"),
+        provenance=provenance or {"origin": "hand-authored"},
         evidence=evidence,
         rubric=rubric,
     )
@@ -133,10 +152,18 @@ def validate_fixture(fixture: Fixture) -> None:
     errors: list[str] = []
     if not fixture.track:
         errors.append("missing @track")
-    if fixture.track not in {"mechanism", "scene", "gameplay", "control"}:
-        errors.append("@track must be mechanism, scene, gameplay, or control")
-    if fixture.place != "baseplate.rbxl":
-        errors.append("place must be baseplate.rbxl")
+    if not IDENTIFIER_PATTERN.fullmatch(fixture.track):
+        errors.append("@track must be a lowercase identifier")
+    if not fixture.place:
+        errors.append("fixture must declare a starter place")
+    elif Path(fixture.place).is_absolute() or ".." in Path(fixture.place).parts:
+        errors.append("place must be a repository-relative path")
+    if not IDENTIFIER_PATTERN.fullmatch(fixture.knowledge_profile):
+        errors.append("@knowledge profile must be a lowercase identifier")
+    if not INSTANCE_NAME_PATTERN.fullmatch(fixture.candidate_root):
+        errors.append("@candidate root must be an instance name")
+    if any(not key or not value for key, value in fixture.provenance.items()):
+        errors.append("@provenance values must be non-empty")
     if len(fixture.prompt) < 200:
         errors.append("prompt is too short for a benchmark fixture")
     if fixture.scenario_name != fixture.fixture_id:
@@ -152,26 +179,47 @@ def validate_fixture(fixture: Fixture) -> None:
         errors.append("@semantic contains duplicate component names")
     if not fixture.semantic_components:
         errors.append("missing @semantic declaration")
-    if fixture.screenshot_type not in {"scene", "mechanism", "gameplay", "control"}:
-        errors.append("@screenshot type must be scene, mechanism, gameplay, or control")
-    if fixture.screenshot_angles < 1 or fixture.screenshot_angles > 4:
-        errors.append("screenshot angles must be between 1 and 4")
-    if fixture.screenshot_primary not in SCREENSHOT_ANGLE_NAMES:
-        errors.append("screenshot primary must be hero, front, side, rear, or top")
+    static_evidence = fixture.evidence.get("static")
+    if static_evidence != "not-applicable":
+        if not IDENTIFIER_PATTERN.fullmatch(fixture.screenshot_type):
+            errors.append("@screenshot type must be a lowercase identifier")
+        if fixture.screenshot_angles < 1 or fixture.screenshot_angles > 4:
+            errors.append("screenshot angles must be between 1 and 4")
+        if fixture.screenshot_primary not in SCREENSHOT_ANGLE_NAMES:
+            errors.append("screenshot primary must be hero, front, side, rear, or top")
+    elif fixture.screenshot_type or fixture.screenshot_angles != 0:
+        errors.append("static=not-applicable cannot declare screenshot capture")
     if fixture.evidence.get("review") != "human-pairwise":
         errors.append("@evidence must declare review=human-pairwise")
-    if fixture.evidence.get("static") != "required":
-        errors.append("@evidence must declare static=required")
     if fixture.stateful and fixture.evidence.get("trace") != "required":
         errors.append("stateful fixture must declare trace=required")
     if fixture.stateful and fixture.evidence.get("reset") != "required":
         errors.append("stateful fixture must declare reset=required")
-    if fixture.evidence.get("video") not in {"optional", "required"}:
-        errors.append("fixture must declare video=optional or video=required")
+    if fixture.screenshot_purpose not in {"diagnostic", "presentation"}:
+        errors.append("screenshot purpose must be diagnostic or presentation")
+    if fixture.evidence.get("static") not in EVIDENCE_OPTIONAL_VALUES:
+        errors.append("fixture must declare static=optional, required, diagnostic, or not-applicable")
+    if fixture.evidence.get("video") not in EVIDENCE_OPTIONAL_VALUES:
+        errors.append("fixture must declare video=optional, required, diagnostic, or not-applicable")
     if fixture.runtime not in {"edit", "play"}:
         errors.append("@runtime mode must be edit or play")
     if errors:
         raise FixtureContractError(f"{fixture.path}: " + "; ".join(errors))
+
+
+def resolve_starter_place(repository_root: str | Path, place: str) -> Path:
+    """Resolve a repository-relative starter place, with legacy Places fallback."""
+    raw = Path(place)
+    if raw.is_absolute() or ".." in raw.parts:
+        raise FixtureContractError("starter place must be repository-relative")
+    root = Path(repository_root)
+    candidates = (root / raw, root / "Places" / raw)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    # Return the canonical repository-relative location so callers can report
+    # the useful missing path without silently inventing another location.
+    return candidates[0]
 
 
 def discover_fixtures(root: str | Path) -> list[Fixture]:

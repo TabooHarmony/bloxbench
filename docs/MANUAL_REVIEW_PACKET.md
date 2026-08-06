@@ -1,28 +1,44 @@
-# BloxBench status
+# BloxBench manual review packet
 
-## short version
+A pairwise packet contains two matched, blinded candidate arms and the evidence available for review.
 
-One ad-hoc canary (fantasy sword) has been run via subagent + RSC. No standardized fixture-driven eval or A/B comparison has been completed yet.
+## labels
 
-## what has been done
+Use exactly one label:
 
-- All 32 evaluation files inspected, seven fixture defects fixed
-- Luau syntax check passed
-- RSC connectivity verified, Studio responsive
-- One canary: fantasy sword built by a subagent through RSC, screenshots captured
+- `A better`
+- `B better`
+- `tie`
+- `both bad`
 
-## what has not been done
+Pairwise preference is the holistic quality signal. Runtime checks, artifact hashes, warnings, reset state, usage, and time remain diagnostic dimensions.
 
-- No standardized fixture-driven eval run
-- No A/B comparison between two models
-- No pairwise human review completed
-- Gameplay and VFX tracks need live playthrough or video, not just screenshots
+## evidence
 
-## the next step
+The packet may contain diagnostic screenshots, viewport-proven videos, generated place files, and presentation-game artifacts.
 
-Run one fixture through the standard path (subagent + RSC), verify the screenshots are valid, then run the same fixture with a second model and do a human pairwise vote:
+Screenshots are diagnostic evidence during the current Studio phase. They do not prove hidden state, dynamic gameplay, timing, multiplayer behavior, or causal attribution. Reviewers should judge only what the attached evidence actually shows.
 
-- A better
-- B better
-- tie
-- both bad
+A run with warnings can remain reviewable. A run with evidence gaps can remain reviewable when another artifact, such as a generated place or presentation output, is available. A run with no reviewable artifact is recorded separately and is not silently converted into a quality judgment.
+
+`evidence_gaps` and `evidence_summary` describe availability. They are not quality scores and do not replace the human decision.
+
+## blind-boundary files
+
+- `packet.json`: reviewer-facing packet metadata and blinded A/B artifacts. It contains no source-to-A/B mapping.
+- `human_review.md`: readable review instructions and diagnostic context.
+- `review_form.json`: the form the reviewer fills in.
+- `provenance_internal` sidecar: parent-only A/B-to-source mapping written beside the packet as a hidden file. Keep it out of the reviewer handoff.
+- `human_decision.json`: the normalized decision written after ingestion.
+
+## record a decision
+
+After filling `review_form.json`, run:
+
+```bash
+python3 scripts/benchmark/record_human_review.py path/to/packet
+```
+
+The command validates the label, preserves the notes hash, records the reviewer and timestamp, and writes `human_decision` into `packet.json`. It does not create an automated quality score. Existing decisions cannot be overwritten unless `--replace` is supplied explicitly.
+
+The packet records the effective fixture, prompt, knowledge context, treatment, source hashes, and artifact provenance internally. Model identity and the A/B mapping stay out of the reviewer-facing files.

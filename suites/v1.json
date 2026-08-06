@@ -1,0 +1,125 @@
+{
+  "expected_task_count": 5,
+  "schema": "bloxbench-suite-v1",
+  "sha256": "2e5bfc9ec267b32503792835433e862b23c52e0e7014e4f93208a3e6d1dc50cd",
+  "suite_id": "v1",
+  "suite_version": "1.0",
+  "task_count": 5,
+  "tasks": [
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.build.001",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Building/VB_BUILD_001_offroad_buggy.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "bc304ec8cbb8c1c70965c3fbe338735008ca9ae05e61f851a0bb7c4f4b1120a1",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a020-car-place,a021-car-crash-system"
+      },
+      "runtime": "edit",
+      "sha256": "5e7ddbce90b7bedddd99de24e36f2db7d19f57e20475c041cceb79254ef5c2d6",
+      "track": "building"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.gameplay.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Gameplay/VB_GAMEPLAY_005_break_wall.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "59454ee4afcb748c55c90114372b13892f5b549d421c0b78635b849cc6db1301",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived gameplay brief",
+        "record": "a126-break-wall-simulator,a067-mine-a-template,a119-mine-a-template"
+      },
+      "runtime": "play",
+      "sha256": "c4e2b0ab25c99074809c949e4e6de1050cb4c9a22225ed93a2572c0ba689ec4b",
+      "track": "gameplay"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.scene.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Scenes/VB_SCENE_005_disaster_room.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "6f8d817040a59f557ac02a9ff0bae2993bb6209894baf42af1981186b7f10af5",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a075-op-file-escape-tsunami,a081-pu-escape-tsunami,a113-survive-lava-for-cars"
+      },
+      "runtime": "edit",
+      "sha256": "f77ec2675a65323d9145014f6c3c6ba685b36800522c00d6b81dcd365fa51c70",
+      "track": "scene"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.ui.002",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/UI/VB_UI_002_daily_reward.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "b098bea2cc01b35fecbdf9f2cda9e25ceca3323828bb072529d343b1e9c2da4f",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived interface brief",
+        "record": "a096-reward-screen-by-arnavdabest,reward-pattern-corpus"
+      },
+      "runtime": "edit",
+      "sha256": "02e2338a1fb1c45ad22a426812ae38fee905b0c0e4c925b93c49b30c18475806",
+      "track": "ui"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.vfx.001",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/VFX/VB_VFX_001_arcane_burst.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "d168052a37822806b3e89e701abade62d0f5dc1f0dbeaada785bc8db79fb195a",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived effect brief",
+        "record": "a124-crossfire-ffa,particle-emitter-patterns"
+      },
+      "runtime": "play",
+      "sha256": "b05e787e947561ab4c54640edef9ec142b5d53ee69e15f8167d74bea8741c002",
+      "track": "vfx"
+    }
+  ]
+}

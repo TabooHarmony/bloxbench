@@ -18,6 +18,7 @@ GENERATION_FILES = (
     "manifest.json",
     "pi-command.json",
     "prompt.txt",
+    "system_prompt.txt",
     "pi.jsonl",
     "pi.stderr",
 )
@@ -76,35 +77,92 @@ def _number(value: Any) -> int | float:
 
 def _add_usage(total: dict[str, int | float], usage: dict[str, Any]) -> None:
     mapping = {
-        "input_tokens": "input",
-        "output_tokens": "output",
-        "cache_read_tokens": "cacheRead",
-        "cache_write_tokens": "cacheWrite",
-        "total_tokens": "totalTokens",
+        "input_tokens": ("input", "input_tokens"),
+        "output_tokens": ("output", "output_tokens"),
+        "cache_read_tokens": ("cacheRead", "cache_read_tokens"),
+        "cache_write_tokens": ("cacheWrite", "cache_write_tokens"),
+        "total_tokens": ("totalTokens", "total_tokens"),
     }
-    for destination, source in mapping.items():
-        total[destination] += _number(usage.get(source))
+    for destination, sources in mapping.items():
+        value = next((usage.get(source) for source in sources if source in usage), 0)
+        total[destination] += _number(value)
     cost = usage.get("cost")
     if isinstance(cost, dict):
-        for destination, source in {
-            "input": "input",
-            "output": "output",
-            "cache_read": "cacheRead",
-            "cache_write": "cacheWrite",
-            "total": "total",
+        for destination, sources in {
+            "input": ("input", "input_tokens"),
+            "output": ("output", "output_tokens"),
+            "cache_read": ("cacheRead", "cache_read"),
+            "cache_write": ("cacheWrite", "cache_write"),
+            "total": ("total", "total_cost"),
         }.items():
-            total[f"cost_{destination}"] += _number(cost.get(source))
+            value = next((cost.get(source) for source in sources if source in cost), 0)
+            total[f"cost_{destination}"] += _number(value)
+    for destination in ("input", "output", "cache_read", "cache_write", "total"):
+        total[f"cost_{destination}"] += _number(usage.get(f"cost_{destination}"))
 
 
 def _generation_manifest(path: Path) -> tuple[Path | None, dict[str, Any]]:
-    manifest_path = path if path.is_file() else path / "manifest.json"
-    if not manifest_path.is_file():
-        return None, {}
+    candidates = [path.as_posix()]
+    if not path.is_file():
+        candidates.append((path / "manifest.json").as_posix())
+        # Repaired candidates keep the generation manifest one level deeper:
+        # <arm_dir>/generation/manifest.json. Accepting the arm root (or the
+        # nested dir) here removes a CLI footgun where a valid model run was
+        # mislabeled "candidate origin is unattributed".
+        candidates.append((path / "generation" / "manifest.json").as_posix())
+    for candidate in candidates:
+        manifest_path = Path(candidate)
+        if manifest_path.is_file():
+            try:
+                value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return manifest_path, {}
+            return manifest_path, value if isinstance(value, dict) else {}
+    return None, {}
+
+
+def _repair_manifest_path(generation_manifest_path: Path) -> Path:
+    if generation_manifest_path.parent.name == "generation":
+        return generation_manifest_path.parent.parent / "repair" / "manifest.json"
+    return generation_manifest_path.parent / "repair" / "manifest.json"
+
+
+def _repair_summary(generation_manifest_path: Path) -> dict[str, Any]:
+    repair_path = _repair_manifest_path(generation_manifest_path)
+    summary: dict[str, Any] = {"is_repaired": repair_path.is_file()}
+    if not repair_path.is_file():
+        return summary
+    summary["manifest_path"] = str(repair_path)
+    summary["manifest_sha256"] = sha256_file(repair_path)
     try:
-        value = json.loads(manifest_path.read_text(encoding="utf-8"))
+        value = json.loads(repair_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return manifest_path, {}
-    return manifest_path, value if isinstance(value, dict) else {}
+        summary["metadata_readable"] = False
+        return summary
+    if not isinstance(value, dict):
+        summary["metadata_readable"] = False
+        return summary
+    summary["metadata_readable"] = True
+    for key in (
+        "repaired_at",
+        "model",
+        "fixture",
+        "attempt",
+        "parent_arm_id",
+        "original_source_sha256",
+        "parent_source_sha256",
+        "error_sha256",
+        "knowledge_profile",
+        "knowledge_sha256",
+        "suite",
+        "prompt_sha256",
+        "system_prompt_sha256",
+    ):
+        if value.get(key) is not None:
+            summary[key] = value[key]
+    if "error_sha256" not in summary and isinstance(value.get("error_text"), str):
+        summary["error_sha256"] = hashlib.sha256(value["error_text"].encode("utf-8")).hexdigest()
+    return summary
 
 
 def summarize_generation(generation_path: str | Path | None) -> dict[str, Any]:
@@ -141,6 +199,7 @@ def summarize_generation(generation_path: str | Path | None) -> dict[str, Any]:
     }
     assistant_messages = 0
     turn_starts = 0
+    event_assistant_messages = 0
     event_counts: dict[str, int] = {}
     first_timestamp: int | float | None = None
     last_timestamp: int | float | None = None
@@ -164,6 +223,7 @@ def summarize_generation(generation_path: str | Path | None) -> dict[str, Any]:
                 if message.get("role") != "assistant":
                     continue
                 assistant_messages += 1
+                event_assistant_messages += 1
                 raw_usage = message.get("usage")
                 if isinstance(raw_usage, dict):
                     _add_usage(usage, raw_usage)
@@ -172,11 +232,17 @@ def summarize_generation(generation_path: str | Path | None) -> dict[str, Any]:
                     first_timestamp = timestamp if first_timestamp is None else min(first_timestamp, timestamp)
                     last_timestamp = timestamp if last_timestamp is None else max(last_timestamp, timestamp)
 
-    # Some old runs have usage in the manifest but no usable event log.
-    if assistant_messages == 0 and isinstance(pi.get("usage"), dict):
-        _add_usage(usage, pi["usage"])
-        assistant_messages = int(_number(pi.get("assistant_messages")))
-    rounds = turn_starts or assistant_messages or int(_number(pi.get("rounds")))
+    # Some direct generation runs store usage in the generation manifest rather
+    # than a pi event log. Preserve that data instead of reporting zero usage.
+    if assistant_messages == 0:
+        fallback_usage = pi.get("usage") if isinstance(pi.get("usage"), dict) else manifest.get("usage")
+        if isinstance(fallback_usage, dict):
+            _add_usage(usage, fallback_usage)
+            assistant_messages = int(
+                _number(pi.get("assistant_messages")) or _number(manifest.get("assistant_messages"))
+            ) or 1
+    fallback_rounds = pi.get("rounds") or manifest.get("rounds")
+    rounds = turn_starts or assistant_messages or int(_number(fallback_rounds))
     elapsed_seconds: float | None = None
     if first_timestamp is not None and last_timestamp is not None and last_timestamp >= first_timestamp:
         elapsed_seconds = round((last_timestamp - first_timestamp) / 1000.0, 3)
@@ -189,11 +255,24 @@ def summarize_generation(generation_path: str | Path | None) -> dict[str, Any]:
         "base_url": manifest.get("base_url"),
         "model": manifest.get("model"),
         "model_name": manifest.get("model_name"),
+        "treatment": manifest.get("treatment"),
+        "knowledge_profile": manifest.get("knowledge_profile"),
+        "knowledge_sha256": manifest.get("knowledge_sha256"),
+        "task_provenance": manifest.get("task_provenance"),
+        "suite": manifest.get("suite"),
+        "generator": manifest.get("generator"),
+        "tool_surface": manifest.get("tool_surface"),
+        "decoding": manifest.get("decoding"),
+        "prompt_order": manifest.get("prompt_order"),
+        "repair_policy": manifest.get("repair_policy"),
         "pi_version": manifest.get("pi_version"),
         "thinking": manifest.get("thinking"),
         "max_output_tokens": manifest.get("max_output_tokens"),
         "prompt_sha256": manifest.get("prompt_sha256")
         or manifest.get("calibration_prompt_sha256"),
+        "fixture_prompt_sha256": manifest.get("fixture_prompt_sha256"),
+        "system_prompt_sha256": manifest.get("system_prompt_sha256"),
+        "fixture_sha256": manifest.get("fixture_sha256"),
         "prompt_path": manifest.get("prompt_path") or manifest.get("calibration_prompt"),
         "prompt_mode": manifest.get("prompt_mode") or manifest.get("calibration_prompt_mode"),
         "task_id": manifest.get("task_id") or manifest.get("fixture_id"),
@@ -208,11 +287,12 @@ def summarize_generation(generation_path: str | Path | None) -> dict[str, Any]:
             "origin": "model",
             "is_model_evaluation": True,
             "manifest_path": str(manifest_path),
+            "repair": _repair_summary(manifest_path),
             "rounds": rounds,
             "assistant_messages": assistant_messages,
             "event_counts": event_counts or pi.get("event_counts", {}),
             "usage": usage,
-            "usage_source": "pi.jsonl message_end events" if pi_path.is_file() else "generation manifest",
+            "usage_source": "pi.jsonl message_end events" if event_assistant_messages else "generation manifest",
             "usage_available": assistant_messages > 0 and usage["total_tokens"] > 0,
         }
     )
@@ -230,7 +310,8 @@ def copy_generation_bundle(generation_path: str | Path | None, destination: Path
     if generation_path is None:
         return summary
     path = Path(generation_path).resolve()
-    source_dir = path if path.is_dir() else path.parent
+    manifest_path, _ = _generation_manifest(path)
+    source_dir = manifest_path.parent if manifest_path is not None else (path if path.is_dir() else path.parent)
     copied: list[dict[str, Any]] = []
     for name in GENERATION_FILES:
         source = source_dir / name
@@ -239,6 +320,13 @@ def copy_generation_bundle(generation_path: str | Path | None, destination: Path
         target = destination / name
         shutil.copy2(source, target)
         copied.append({"name": name, "path": str(target), "sha256": sha256_file(target), "bytes": target.stat().st_size})
+    if manifest_path is not None:
+        repair_source = _repair_manifest_path(manifest_path)
+        if repair_source.is_file():
+            repair_target = destination / "repair" / "manifest.json"
+            repair_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(repair_source, repair_target)
+            copied.append({"name": "repair/manifest.json", "path": str(repair_target), "sha256": sha256_file(repair_target), "bytes": repair_target.stat().st_size})
     summary["copied_files"] = copied
     return summary
 
@@ -262,8 +350,6 @@ def write_structured_evidence(run_dir: Path, manifest: dict[str, Any]) -> Path:
     readbacks = manifest.get("readbacks") or {}
     screenshot_metadata = manifest.get("screenshot_metadata") or {}
     modes = list(contract.get("states") or [])
-    if not modes:
-        modes = ["capture"]
     observations = []
     for mode in modes:
         run_key = f"run:{mode}"
@@ -309,6 +395,9 @@ def write_structured_evidence(run_dir: Path, manifest: dict[str, Any]) -> Path:
         "trace": manifest.get("trace"),
         "screenshots": screenshot_metadata,
         "videos": manifest.get("videos", []),
+        "presentation_artifacts": manifest.get("presentation_artifacts", []),
+        "evidence_gaps": manifest.get("evidence_gaps", []),
+        "evidence_summary": manifest.get("evidence_summary", {}),
         "quality_scored": False,
         "human_review_required": True,
     }
@@ -324,6 +413,8 @@ def write_evaluation_summary(run_dir: Path, manifest: dict[str, Any]) -> None:
         "evaluation_id",
         "state",
         "evidence_state",
+        "evidence_gaps",
+        "evidence_summary",
         "created_at",
         "started_at",
         "completed_at",
@@ -339,6 +430,7 @@ def write_evaluation_summary(run_dir: Path, manifest: dict[str, Any]) -> None:
         "screenshot_contract",
         "screenshots",
         "videos",
+        "presentation_artifacts",
         "human_review",
         "error",
     )

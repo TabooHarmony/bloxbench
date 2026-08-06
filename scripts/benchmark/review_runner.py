@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.benchmark.fixture_contract import SCREENSHOT_ANGLE_NAMES, Fixture, parse_fixture  # noqa: E402
+from scripts.benchmark.fixture_contract import SCREENSHOT_ANGLE_NAMES, Fixture, parse_fixture, resolve_starter_place  # noqa: E402
 from scripts.benchmark.evaluation_bundle import (  # noqa: E402
     artifact_record,
     copy_generation_bundle,
@@ -36,6 +36,7 @@ from scripts.benchmark.evaluation_bundle import (  # noqa: E402
     write_bundle_readme,
     write_evaluation_summary,
 )
+from scripts.benchmark.build_to_place import convert_export_json  # noqa: E402
 from scripts.test_flight import run_test_flight as qualified  # noqa: E402
 
 
@@ -46,7 +47,9 @@ SENSITIVE_SOURCE = re.compile(
     r"(?i)(api[_-]?key|access[_-]?token|secret[_-]?key|password|authorization\s*[:=]|begin [^-]+ private key)"
 )
 
-RESET_CODE = r'''local removed = 0
+def reset_code(candidate_root: str = "BloxBenchCandidate") -> str:
+    root_name = json.dumps(candidate_root)
+    return f'''local removed = 0
 local function remove(parent, name)
     local item = parent:FindFirstChild(name)
     if item then
@@ -54,18 +57,18 @@ local function remove(parent, name)
         removed += 1
     end
 end
-remove(workspace, "BloxBenchCandidate")
+remove(workspace, {root_name})
 remove(workspace, "_BloxBenchCapture")
 remove(game:GetService("ReplicatedStorage"), "_BloxBenchFixtureCode")
 remove(game:GetService("ReplicatedStorage"), "_BloxBenchRuntime")
 remove(game:GetService("ServerScriptService"), "_BloxBenchRuntime")
 local selection = game:GetService("Selection")
-selection:Set({})
+selection:Set({{}})
 local camera = workspace.CurrentCamera
 if camera then
     camera.CameraType = Enum.CameraType.Custom
 end
-return {marker = "bloxbench-reset", removed = removed}
+return {{marker = "bloxbench-reset", removed = removed}}
 '''
 
 BOOTSTRAP_CODE = 'return {marker = "bloxbench-rsc-bootstrap", value = 1}'
@@ -79,11 +82,12 @@ CAMERA_ANGLES: dict[str, tuple[int, int, int]] = {
 }
 
 
-def camera_code(angle: str = "hero") -> str:
+def camera_code(angle: str = "hero", candidate_root: str = "BloxBenchCandidate") -> str:
     safe_angle = angle if angle in CAMERA_ANGLES else "hero"
     x, y, z = CAMERA_ANGLES[safe_angle]
-    return f'''local candidate = workspace:FindFirstChild("BloxBenchCandidate")
-assert(candidate and candidate:IsA("Model"), "BloxBenchCandidate model is missing")
+    root_name = json.dumps(candidate_root)
+    return f'''local candidate = workspace:FindFirstChild({root_name})
+assert(candidate and candidate:IsA("Model"), "candidate model is missing")
 local camera = workspace.CurrentCamera
 assert(camera, "CurrentCamera is unavailable")
 local boundsCFrame, boundsSize = candidate:GetBoundingBox()
@@ -411,6 +415,64 @@ def runtime_client_role(response: dict[str, Any]) -> str:
     return roles[0]
 
 
+def _export_generated_place(run: ReviewRun, run_dir: Path, fixture: Fixture) -> None:
+    """Export the live candidate as a playable artifact (build JSON + .rbxlx).
+
+    Runs against the authoring workspace, so it must be called AFTER play_stop
+    for play fixtures (during playtest, the fixture's declared candidate root is
+    not addressable). Best-effort: failures are recorded in the manifest and
+    never fail the run.
+    """
+    if run.manifest.get("place") and (run.manifest.get("place") or {}).get("generated"):
+        return
+    try:
+        export_response = run.bridge(
+            {
+                "operation": "export_build",
+                "instance_id": run.instance_id,
+                "arguments": {
+                    "instance_path": f"game.Workspace.{fixture.candidate_root}",
+                    "output_id": f"bloxbench_{fixture.fixture_id.replace('.', '_')}_{uuid.uuid4().hex[:8]}",
+                },
+                "artifact_dir": str(run_dir / "place" / "export"),
+                "timeout": 180,
+            },
+            timeout=240,
+        )
+        artifact_path = export_response.get("artifact_path")
+        if isinstance(artifact_path, str) and Path(artifact_path).is_file():
+            exported = Path(artifact_path)
+            place_dest = run_dir / "place" / f"generated-{fixture.fixture_id.replace('.', '_')}.json"
+            shutil.copy2(exported, place_dest)
+            run.manifest["place"] = {
+                "generated": True,
+                "kind": "studio_build_export",
+                "format": "roblox-bench-export-json",
+                "path": str(place_dest.resolve()),
+                "sha256": sha256_file(place_dest),
+                "bytes": place_dest.stat().st_size,
+                "note": "Studio build export (parts/material manifest from the live candidate).",
+            }
+            run.manifest["export"] = export_response.get("export", {})
+            # Convert the parts/material manifest into a playable .rbxlx so a
+            # human can open this arm's build in Studio.
+            try:
+                place_rbxlx = run_dir / "place" / f"generated-{fixture.fixture_id.replace('.', '_')}.rbxlx"
+                place_rbxlx_meta = convert_export_json(place_dest, place_rbxlx)
+                run.manifest["place_path"] = place_rbxlx_meta["path"]
+                run.manifest["place"]["rbxlx"] = place_rbxlx_meta
+            except Exception as place_exc:
+                run.manifest["place_path_error"] = {
+                    "type": type(place_exc).__name__,
+                    "message": qualified._text_tail(qualified.redact_text(str(place_exc))),
+                }
+    except Exception as export_exc:
+        run.manifest["export_error"] = {
+            "type": type(export_exc).__name__,
+            "message": qualified._text_tail(qualified.redact_text(str(export_exc))),
+        }
+
+
 def copy_video(video: Path, destination: Path, proof_path: Path | None) -> dict[str, Any]:
     if not video.is_file():
         raise FileNotFoundError(video)
@@ -465,6 +527,15 @@ def initial_manifest(
         "evaluation_id": run_dir.name,
         "state": "not_run",
         "evidence_state": "not run",
+        "evidence_gaps": [],
+        "evidence_summary": {
+            "quality_judgment": "human-pairwise",
+            "quality_scored": False,
+            "reviewable_artifact_available": False,
+            "available_artifacts": [],
+            "gaps": [],
+            "diagnostic_only": True,
+        },
         "created_at": utc_now(),
         "run_dir": str(run_dir.resolve()),
         "fixture": {
@@ -475,13 +546,19 @@ def initial_manifest(
             "prompt_sha256": sha256_bytes(fixture.prompt.encode("utf-8")),
             "place": fixture.place,
             "track": fixture.track,
+            "candidate_root": fixture.candidate_root,
+            "knowledge_profile": fixture.knowledge_profile,
+            "provenance": fixture.provenance,
             "states": list(fixture.states),
             "runtime": fixture.runtime,
             "semantic_components": list(fixture.semantic_components),
+            "screenshot_purpose": fixture.screenshot_purpose,
             "evidence": fixture.evidence,
         },
         "candidate": {
             "origin": "model" if is_model else "unattributed",
+            "treatment": generation.get("treatment"),
+            "repair": generation.get("repair"),
             "is_model_evaluation": is_model,
             "label": "model candidate" if is_model else "synthetic_or_unattributed_candidate",
         },
@@ -497,15 +574,18 @@ def initial_manifest(
         "trace": {},
         "readbacks": {},
         "screenshot_contract": {
+            "enabled": fixture.evidence.get("static") != "not-applicable",
             "type": fixture.screenshot_type,
             "angles": fixture.screenshot_angles,
-            "angle_names": list(screenshot_angle_names(fixture)),
+            "angle_names": list(screenshot_angle_names(fixture)) if fixture.evidence.get("static") != "not-applicable" else [],
             "primary": fixture.screenshot_primary,
+            "purpose": fixture.screenshot_purpose,
             "states": list(fixture.states),
         },
         "screenshot_metadata": {},
         "screenshots": {},
         "videos": [],
+        "presentation_artifacts": [],
         "human_review": {
             "protocol": "blind-pairwise",
             "allowed_labels": ["A better", "B better", "tie", "both bad"],
@@ -562,11 +642,18 @@ def write_review_packet(run: ReviewRun) -> None:
     else:
         lines.append("- none recorded")
     lines.extend(["", "## evidence files", ""])
+    lines.append("Screenshots in this phase are diagnostic evidence, not proof of dynamic gameplay.")
+    lines.append(f"Evidence gaps: `{', '.join(manifest.get('evidence_gaps') or []) or 'none recorded'}`")
     for name, value in (manifest.get("screenshots") or {}).items():
         lines.append(f"- screenshot `{name}`: `{value}`")
     for value in manifest.get("videos") or []:
         lines.append(f"- video: `{value.get('path')}`")
-    if not (manifest.get("screenshots") or manifest.get("videos")):
+    for value in manifest.get("presentation_artifacts") or []:
+        if isinstance(value, dict):
+            lines.append(f"- presentation `{value.get('name') or value.get('kind') or 'artifact'}`: `{value.get('path') or value.get('uri')}`")
+    if manifest.get("place"):
+        lines.append(f"- place: `{(manifest.get('place') or {}).get('path', 'recorded')}`")
+    if not (manifest.get("screenshots") or manifest.get("videos") or manifest.get("presentation_artifacts") or manifest.get("place")):
         lines.append("- none")
     lines.extend(
         [
@@ -574,11 +661,45 @@ def write_review_packet(run: ReviewRun) -> None:
             "## human protocol",
             "",
             "Compare matched A/B outputs using exactly one label: `A better`, `B better`, `tie`, or `both bad`.",
-            "Judge visual quality, coherence, completeness, legibility, and gameplay/animation feel from the attached evidence.",
+            "Judge visual quality, coherence, completeness, legibility, and gameplay/animation feel only where the attached evidence shows it.",
+            "Screenshots are diagnostic and do not prove hidden state, dynamic gameplay, timing, multiplayer behavior, or causal attribution.",
             "Do not infer quality from the automated observations above.",
         ]
     )
     (run.run_dir / "review_packet.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def refresh_evidence_summary(manifest: dict[str, Any]) -> None:
+    """Record evidence availability separately from any human quality judgment."""
+    fixture = manifest.get("fixture") or {}
+    declared = fixture.get("evidence") or {}
+    gaps = [str(item) for item in manifest.get("evidence_gaps") or []]
+    static_mode = declared.get("static", "required")
+    if static_mode != "not-applicable" and not manifest.get("screenshots"):
+        gaps.append("screenshots")
+    if declared.get("video") == "required" and not manifest.get("videos"):
+        gaps.append("video")
+    if declared.get("presentation") == "required" and not manifest.get("presentation_artifacts"):
+        gaps.append("presentation")
+    gaps = list(dict.fromkeys(gaps))
+    artifacts = []
+    if manifest.get("screenshots"):
+        artifacts.append("screenshots")
+    if manifest.get("videos"):
+        artifacts.append("videos")
+    if manifest.get("presentation_artifacts"):
+        artifacts.append("presentation")
+    if (manifest.get("place") or {}).get("generated") is True:
+        artifacts.append("place")
+    manifest["evidence_gaps"] = gaps
+    manifest["evidence_summary"] = {
+        "quality_judgment": (manifest.get("human_review") or {}).get("protocol", "human-pairwise"),
+        "quality_scored": False,
+        "reviewable_artifact_available": bool(artifacts),
+        "available_artifacts": artifacts,
+        "gaps": gaps,
+        "diagnostic_only": True,
+    }
 
 
 def _set_failure(manifest: dict[str, Any], exc: BaseException, *, execution_started: bool) -> None:
@@ -589,6 +710,7 @@ def _set_failure(manifest: dict[str, Any], exc: BaseException, *, execution_star
         "message": qualified._text_tail(qualified.redact_text(str(exc))),
     }
     manifest["completed_at"] = utc_now()
+    refresh_evidence_summary(manifest)
 
 
 def create_run_dir(output_root: Path, fixture_id: str) -> Path:
@@ -621,9 +743,13 @@ def run_review(
         raise ValueError("every supplied video must have a matching viewport-only capture proof")
     if video_proofs and not videos:
         raise ValueError("video proof cannot be supplied without a matching video")
+    template_place = resolve_starter_place(ROOT, fixture.place)
+    if not template_place.is_file():
+        raise FileNotFoundError(
+            f"declared starter place was not found for {fixture.fixture_id}: {fixture.place}"
+        )
     place_info: dict[str, Any] | None = None
     if place_file is not None:
-        template_place = ROOT / "Places" / fixture.place
         place_info = validate_place_file(place_file, template_path=template_place)
     if run_dir.exists():
         raise FileExistsError(f"run directory already exists: {run_dir}")
@@ -644,7 +770,6 @@ def run_review(
     run.manifest["source"]["captured_path"] = str((run_dir / "source" / "candidate.luau").resolve())
     run.manifest["fixture"]["captured_path"] = str((run_dir / "fixture" / fixture.path.name).resolve())
 
-    template_place = ROOT / "Places" / fixture.place
     if template_place.is_file():
         template_copy = run_dir / "place" / f"input-{template_place.name}"
         shutil.copy2(template_place, template_copy)
@@ -677,6 +802,7 @@ def run_review(
         if plan_only:
             run.manifest["state"] = "planned"
             run.manifest["completed_at"] = utc_now()
+            refresh_evidence_summary(run.manifest)
             run.write_manifest()
             write_evaluation_summary(run.run_dir, run.manifest)
             write_bundle_readme(run.run_dir, run.manifest)
@@ -714,7 +840,7 @@ def run_review(
         run.manifest["bootstrap"] = compact_job(bootstrap)
 
         reset = run.bridge(
-            {"operation": "exec", "instance_id": run.instance_id, "target": "edit", "code": RESET_CODE},
+            {"operation": "exec", "instance_id": run.instance_id, "target": "edit", "code": reset_code(fixture.candidate_root)},
             timeout=180,
         )
         run.require_luau(reset, "initial reset", "bloxbench-reset")
@@ -771,7 +897,9 @@ def run_review(
         )
         run.manifest["readbacks"]["check_scene"] = run.require_luau(scene, "scene check", "bloxbench-hook")
 
-        modes = list(fixture.states) if fixture.states else ["capture"]
+        modes = list(fixture.states)
+        if fixture.runtime == "play" and not modes:
+            modes = ["default"]
         playing = False
         client_role: str | None = None
         if fixture.runtime == "play":
@@ -806,35 +934,37 @@ def run_review(
                 raise RuntimeError(f"runtime client did not become ready: {runtime_attempts!r}")
             run.manifest["runtime_client_discovery"] = runtime_attempts
         try:
-            angles = screenshot_angle_names(fixture)
-            primary_angle = angles[0]
-            hero_operation = "eval" if playing else "exec"
-            hero_target = client_role if playing else "edit"
-            camera = run.bridge(
-                {
-                    "operation": hero_operation,
-                    "instance_id": run.instance_id,
-                    "target": hero_target,
-                    "code": camera_code(primary_angle),
-                    "timeout": 180,
-                },
-                timeout=240,
-            )
-            run.require_luau(camera, "hero camera", "bloxbench-camera")
-            screenshot = capture_screenshot(
-                run,
-                run.instance_id,
-                run_dir / "screenshots" / "raw" / "initial" / primary_angle,
-                timeout=240,
-            )
-            hero_record = store_screenshot(
-                screenshot,
-                "hero screenshot",
-                run_dir / "screenshots" / f"initial-{primary_angle}.png",
-                scope="roblox-client-viewport" if playing else "roblox-studio-window",
-            )
-            run.manifest["screenshots"][f"initial_{primary_angle}"] = hero_record["path"]
-            run.manifest["screenshot_metadata"][f"initial_{primary_angle}"] = hero_record
+            capture_static = fixture.evidence.get("static") != "not-applicable"
+            angles = screenshot_angle_names(fixture) if capture_static else []
+            primary_angle = angles[0] if angles else "hero"
+            if capture_static:
+                hero_operation = "eval" if playing else "exec"
+                hero_target = client_role if playing else "edit"
+                camera = run.bridge(
+                    {
+                        "operation": hero_operation,
+                        "instance_id": run.instance_id,
+                        "target": hero_target,
+                        "code": camera_code(primary_angle, fixture.candidate_root),
+                        "timeout": 180,
+                    },
+                    timeout=240,
+                )
+                run.require_luau(camera, "hero camera", "bloxbench-camera")
+                screenshot = capture_screenshot(
+                    run,
+                    run.instance_id,
+                    run_dir / "screenshots" / "raw" / "initial" / primary_angle,
+                    timeout=240,
+                )
+                hero_record = store_screenshot(
+                    screenshot,
+                    "hero screenshot",
+                    run_dir / "screenshots" / f"initial-{primary_angle}.png",
+                    scope="roblox-client-viewport" if playing else "roblox-studio-window",
+                )
+                run.manifest["screenshots"][f"initial_{primary_angle}"] = hero_record["path"]
+                run.manifest["screenshot_metadata"][f"initial_{primary_angle}"] = hero_record
 
             for mode in modes:
                 target = "server" if playing else "edit"
@@ -865,39 +995,40 @@ def run_review(
                 run.manifest["readbacks"][f"check_game:{mode}"] = run.require_luau(
                     check_response, f"game check {mode}", "bloxbench-hook"
                 )
-                for angle in angles:
-                    frame_operation = "eval" if playing else "exec"
-                    frame_target = client_role if playing else "edit"
-                    frame_camera = run.bridge(
-                        {
-                            "operation": frame_operation,
-                            "instance_id": run.instance_id,
-                            "target": frame_target,
-                            "code": camera_code(angle),
-                            "timeout": 120,
-                        },
-                        timeout=180,
-                    )
-                    run.require_luau(frame_camera, f"camera {mode}/{angle}", "bloxbench-camera")
-                    frame = capture_screenshot(
-                        run,
-                        run.instance_id,
-                        run_dir / "screenshots" / "raw" / f"state-{mode}" / angle,
-                        timeout=240,
-                    )
-                    angle_suffix = "" if len(angles) == 1 else f"-{angle}"
-                    screenshot_key = f"state-{mode}{angle_suffix}"
-                    frame_record = store_screenshot(
-                        frame,
-                        f"state screenshot {mode}/{angle}",
-                        run_dir / "screenshots" / f"{screenshot_key}.png",
-                        scope="roblox-client-viewport" if playing else "roblox-studio-window",
-                    )
-                    run.manifest["screenshots"][screenshot_key] = frame_record["path"]
-                    run.manifest["screenshot_metadata"][screenshot_key] = frame_record
+                if capture_static:
+                    for angle in angles:
+                        frame_operation = "eval" if playing else "exec"
+                        frame_target = client_role if playing else "edit"
+                        frame_camera = run.bridge(
+                            {
+                                "operation": frame_operation,
+                                "instance_id": run.instance_id,
+                                "target": frame_target,
+                                "code": camera_code(angle, fixture.candidate_root),
+                                "timeout": 120,
+                            },
+                            timeout=180,
+                        )
+                        run.require_luau(frame_camera, f"camera {mode}/{angle}", "bloxbench-camera")
+                        frame = capture_screenshot(
+                            run,
+                            run.instance_id,
+                            run_dir / "screenshots" / "raw" / f"state-{mode}" / angle,
+                            timeout=240,
+                        )
+                        angle_suffix = "" if len(angles) == 1 else f"-{angle}"
+                        screenshot_key = f"state-{mode}{angle_suffix}"
+                        frame_record = store_screenshot(
+                            frame,
+                            f"state screenshot {mode}/{angle}",
+                            run_dir / "screenshots" / f"{screenshot_key}.png",
+                            scope="roblox-client-viewport" if playing else "roblox-studio-window",
+                        )
+                        run.manifest["screenshots"][screenshot_key] = frame_record["path"]
+                        run.manifest["screenshot_metadata"][screenshot_key] = frame_record
 
             primary_mode = modes[0] if modes else None
-            if primary_mode is not None:
+            if capture_static and primary_mode is not None:
                 primary_suffix = "" if len(angles) == 1 else f"-{primary_angle}"
                 primary_key = f"state-{primary_mode}{primary_suffix}"
                 primary_source = run_dir / "screenshots" / f"{primary_key}.png"
@@ -918,41 +1049,10 @@ def run_review(
             # Export the candidate from Studio as a playable artifact. This is
             # best-effort: screenshots + readbacks remain the review evidence,
             # but a successful export lets a human open the actual place.
-            if not run.manifest.get("place") or not (run.manifest.get("place") or {}).get("generated"):
-                try:
-                    export_response = run.bridge(
-                        {
-                            "operation": "export_build",
-                            "instance_id": run.instance_id,
-                            "arguments": {
-                                "instance_path": "game.Workspace.BloxBenchCandidate",
-                                "output_id": f"bloxbench_{fixture.fixture_id.replace('.', '_')}_{uuid.uuid4().hex[:8]}",
-                            },
-                            "artifact_dir": str(run_dir / "place" / "export"),
-                            "timeout": 180,
-                        },
-                        timeout=240,
-                    )
-                    artifact_path = export_response.get("artifact_path")
-                    if isinstance(artifact_path, str) and Path(artifact_path).is_file():
-                        exported = Path(artifact_path)
-                        place_dest = run_dir / "place" / f"generated-{fixture.fixture_id.replace('.', '_')}.json"
-                        shutil.copy2(exported, place_dest)
-                        run.manifest["place"] = {
-                            "generated": True,
-                            "kind": "studio_build_export",
-                            "format": "roblox-bench-export-json",
-                            "path": str(place_dest.resolve()),
-                            "sha256": sha256_file(place_dest),
-                            "bytes": place_dest.stat().st_size,
-                            "note": "Studio build export (parts/material manifest from the live candidate).",
-                        }
-                        run.manifest["export"] = export_response.get("export", {})
-                except Exception as export_exc:
-                    run.manifest["export_error"] = {
-                        "type": type(export_exc).__name__,
-                        "message": qualified._text_tail(qualified.redact_text(str(export_exc))),
-                    }
+            # MUST run against the authoring workspace: for play fixtures the
+            # workspace during playtest is the runtime copy where the candidate
+            # container is not addressable, so export happens after play_stop.
+            pass  # moved to _export_generated_place after play_stop below
         finally:
             if playing:
                 stopped = run.bridge(
@@ -960,6 +1060,7 @@ def run_review(
                     timeout=240,
                 )
                 run.require_remote(stopped, "playtest stop")
+            _export_generated_place(run, run_dir, fixture)
 
         cleanup = run.bridge(
             {
@@ -973,7 +1074,7 @@ def run_review(
         )
         run.manifest["readbacks"]["cleanup"] = run.require_luau(cleanup, "fixture cleanup", "bloxbench-hook")
         final_reset = run.bridge(
-            {"operation": "exec", "instance_id": run.instance_id, "target": "edit", "code": RESET_CODE},
+            {"operation": "exec", "instance_id": run.instance_id, "target": "edit", "code": reset_code(fixture.candidate_root)},
             timeout=180,
         )
         run.require_luau(final_reset, "final reset", "bloxbench-reset")
@@ -990,6 +1091,7 @@ def run_review(
         if not run.manifest["videos"]:
             run.manifest["video_policy"] = "withheld_until_viewport_only_capture"
 
+        refresh_evidence_summary(run.manifest)
         place_generated = bool((run.manifest.get("place") or {}).get("generated"))
         model_candidate = (run.manifest.get("candidate") or {}).get("is_model_evaluation") is True
         run.manifest["state"] = "completed" if place_generated else "completed_unexported"
@@ -1036,7 +1138,7 @@ def run_review(
                         "operation": "exec",
                         "instance_id": run.instance_id,
                         "target": "edit",
-                        "code": RESET_CODE,
+                        "code": reset_code(fixture.candidate_root),
                         "timeout": 120,
                     },
                     timeout=180,
@@ -1088,11 +1190,62 @@ def attach_videos(
     run.manifest["state"] = "completed"
     run.manifest["evidence_state"] = "valid reviewable result"
     run.manifest["completed_at"] = utc_now()
+    refresh_evidence_summary(run.manifest)
     run.write_manifest()
     write_evaluation_summary(run.run_dir, run.manifest)
     write_bundle_readme(run.run_dir, run.manifest)
     write_review_packet(run)
     return RunResult(run_dir, "completed", "valid reviewable result", run.manifest)
+
+
+def attach_presentation_artifacts(run_dir: Path, artifacts: tuple[Path, ...]) -> RunResult:
+    """Attach presentation-game outputs without changing the runtime verdict.
+
+    Presentation artifacts are review surfaces. They are not converted into a
+    runtime pass/fail result and can coexist with a failed run that still has a
+    reviewable artifact.
+    """
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(manifest_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("state") not in {"completed", "completed_unexported", "failed"}:
+        raise ValueError("presentation artifacts require a terminal run")
+    destination_dir = run_dir / "presentation"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    attached = manifest.setdefault("presentation_artifacts", [])
+    for index, artifact in enumerate(artifacts):
+        if not artifact.is_file():
+            raise FileNotFoundError(artifact)
+        if artifact.stat().st_size == 0:
+            raise ValueError(f"presentation artifact is empty: {artifact}")
+        destination = destination_dir / f"artifact-{len(attached) + index}{artifact.suffix.lower()}"
+        shutil.copy2(artifact, destination)
+        attached.append(
+            {
+                "kind": "presentation-artifact",
+                "role": "presentation",
+                "name": artifact.name,
+                "path": str(destination.resolve()),
+                "sha256": sha256_file(destination),
+                "bytes": destination.stat().st_size,
+            }
+        )
+    manifest["presentation_attachment"] = {"attached_at": utc_now(), "count": len(artifacts)}
+    if manifest.get("state") == "failed" and attached:
+        manifest["evidence_state"] = "failed but reviewable artifact present"
+    refresh_evidence_summary(manifest)
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_evaluation_summary(run_dir, manifest)
+    write_bundle_readme(run_dir, manifest)
+    run = ReviewRun(
+        fixture=parse_fixture(manifest["fixture"]["path"]),
+        source_path=Path(manifest["source"]["path"]),
+        run_dir=run_dir,
+        manifest=manifest,
+    )
+    write_review_packet(run)
+    return RunResult(run_dir, manifest["state"], manifest["evidence_state"], manifest)
 
 
 def build_parser() -> argparse.ArgumentParser:

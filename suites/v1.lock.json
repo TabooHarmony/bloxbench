@@ -1,0 +1,341 @@
+{
+  "evaluation": {
+    "artifacts": [
+      {
+        "path": "scripts/benchmark/fixture_contract.py",
+        "sha256": "02853144eea4ae9573f0b0d838560796584bc70cdb47072f57e016e2e7d16807"
+      },
+      {
+        "path": "scripts/benchmark/suite_manifest.py",
+        "sha256": "5c45baae8f8f8f7822049b6a556c7f066f3054396e460af472440b6a0727e6c6"
+      },
+      {
+        "path": "scripts/benchmark/review_runner.py",
+        "sha256": "7f7e17f4801807454a48641710651dac3d5963dc372d17e5872f3962431a0a78"
+      },
+      {
+        "path": "scripts/benchmark/evaluation_bundle.py",
+        "sha256": "6bd1314e2f2c4ba4b3a9cedc4244ff32e2944a9b3fb955025d3f0959279e6b39"
+      },
+      {
+        "path": "scripts/benchmark/pairwise_packet.py",
+        "sha256": "3817dc13686a34bc67fc8bd13f5ffb3b73bb9572210647fab73d7a237e587884"
+      },
+      {
+        "path": "scripts/benchmark/record_human_review.py",
+        "sha256": "7f5a85de20ccd29603a7d8ee1f84b9446458530e36b010ba445c87fcac0fceaa"
+      },
+      {
+        "path": "scripts/benchmark/build_to_place.py",
+        "sha256": "33f5e30d250a7fa236754cbb4b90513c9cc8dc057a8901bb4a38a35510e58045"
+      }
+    ],
+    "diagnostic_screenshots_are_proof": false,
+    "evidence_is_quality_judgment": false,
+    "quality_signal": "human-pairwise",
+    "reviewer_labels": [
+      "A better",
+      "B better",
+      "tie",
+      "both bad"
+    ]
+  },
+  "generation": {
+    "base_url": "https://hyper.charm.land/v1",
+    "decoding": {
+      "seed": null,
+      "temperature": null,
+      "top_p": null
+    },
+    "generator": {
+      "path": "scripts/benchmark/generate_candidate.py",
+      "sha256": "4c1f03d6cc86c9197ed86539cc2a690adda9cbe58b8ad9d521f01787c3cbdf63"
+    },
+    "knowledge": [
+      {
+        "content_sha256": "522c5e7018e8be1e673caac2c4d08eab257394aeaf54dfa5eaa9c2b3b0a1d3df",
+        "name": "roblox-core-v1",
+        "path": "scripts/benchmark/knowledge/roblox-core-v1.txt",
+        "sha256": "9bc2694971cedf5721e8942bfdf997f84462ca98e65e0a09e9b0fde7acf5e68b",
+        "system_prompt_sha256": "0d1b2061f106f41ec3de1d83fe4f2895fad4b9194aa92b01fbad8748031489dc"
+      }
+    ],
+    "models": {
+      "flash": {
+        "id": "deepseek-v4-flash",
+        "max_output_tokens": 8192,
+        "name": "DeepSeek V4 Flash"
+      },
+      "pro": {
+        "id": "deepseek-v4-pro",
+        "max_output_tokens": 16384,
+        "name": "DeepSeek V4 Pro"
+      }
+    },
+    "prompt_order": [
+      "system",
+      "user"
+    ],
+    "provider": "charm-hyper",
+    "tool_surface": {
+      "protocol": "openai-chat-completions",
+      "tools": []
+    }
+  },
+  "schema": "bloxbench-benchmark-lock-v1",
+  "sha256": "79a12ce3dc7bfff9aeab68ccd6010011bd3989442be009a5da2dbd4fb4ab7f88",
+  "suite": {
+    "manifest": {
+      "expected_task_count": 5,
+      "schema": "bloxbench-suite-v1",
+      "sha256": "2e5bfc9ec267b32503792835433e862b23c52e0e7014e4f93208a3e6d1dc50cd",
+      "suite_id": "v1",
+      "suite_version": "1.0",
+      "task_count": 5,
+      "tasks": [
+        {
+          "candidate_root": "BloxBenchCandidate",
+          "evidence": {
+            "reset": "required",
+            "review": "human-pairwise",
+            "static": "diagnostic",
+            "trace": "not-applicable",
+            "video": "not-applicable"
+          },
+          "id": "v1.build.001",
+          "knowledge_profile": "roblox-core-v1",
+          "path": "Evals/Building/VB_BUILD_001_offroad_buggy.lua",
+          "place": "baseplate.rbxl",
+          "prompt_sha256": "bc304ec8cbb8c1c70965c3fbe338735008ca9ae05e61f851a0bb7c4f4b1120a1",
+          "provenance": {
+            "license": "unknown",
+            "origin": "corpus-derived design brief",
+            "record": "a020-car-place,a021-car-crash-system"
+          },
+          "runtime": "edit",
+          "sha256": "5e7ddbce90b7bedddd99de24e36f2db7d19f57e20475c041cceb79254ef5c2d6",
+          "track": "building"
+        },
+        {
+          "candidate_root": "BloxBenchCandidate",
+          "evidence": {
+            "reset": "required",
+            "review": "human-pairwise",
+            "static": "diagnostic",
+            "trace": "required",
+            "video": "not-applicable"
+          },
+          "id": "v1.gameplay.005",
+          "knowledge_profile": "roblox-core-v1",
+          "path": "Evals/Gameplay/VB_GAMEPLAY_005_break_wall.lua",
+          "place": "baseplate.rbxl",
+          "prompt_sha256": "59454ee4afcb748c55c90114372b13892f5b549d421c0b78635b849cc6db1301",
+          "provenance": {
+            "license": "unknown",
+            "origin": "corpus-derived gameplay brief",
+            "record": "a126-break-wall-simulator,a067-mine-a-template,a119-mine-a-template"
+          },
+          "runtime": "play",
+          "sha256": "c4e2b0ab25c99074809c949e4e6de1050cb4c9a22225ed93a2572c0ba689ec4b",
+          "track": "gameplay"
+        },
+        {
+          "candidate_root": "BloxBenchCandidate",
+          "evidence": {
+            "reset": "required",
+            "review": "human-pairwise",
+            "static": "diagnostic",
+            "trace": "not-applicable",
+            "video": "not-applicable"
+          },
+          "id": "v1.scene.005",
+          "knowledge_profile": "roblox-core-v1",
+          "path": "Evals/Scenes/VB_SCENE_005_disaster_room.lua",
+          "place": "baseplate.rbxl",
+          "prompt_sha256": "6f8d817040a59f557ac02a9ff0bae2993bb6209894baf42af1981186b7f10af5",
+          "provenance": {
+            "license": "unknown",
+            "origin": "corpus-derived design brief",
+            "record": "a075-op-file-escape-tsunami,a081-pu-escape-tsunami,a113-survive-lava-for-cars"
+          },
+          "runtime": "edit",
+          "sha256": "f77ec2675a65323d9145014f6c3c6ba685b36800522c00d6b81dcd365fa51c70",
+          "track": "scene"
+        },
+        {
+          "candidate_root": "BloxBenchCandidate",
+          "evidence": {
+            "reset": "required",
+            "review": "human-pairwise",
+            "static": "diagnostic",
+            "trace": "not-applicable",
+            "video": "not-applicable"
+          },
+          "id": "v1.ui.002",
+          "knowledge_profile": "roblox-core-v1",
+          "path": "Evals/UI/VB_UI_002_daily_reward.lua",
+          "place": "baseplate.rbxl",
+          "prompt_sha256": "b098bea2cc01b35fecbdf9f2cda9e25ceca3323828bb072529d343b1e9c2da4f",
+          "provenance": {
+            "license": "unknown",
+            "origin": "corpus-derived interface brief",
+            "record": "a096-reward-screen-by-arnavdabest,reward-pattern-corpus"
+          },
+          "runtime": "edit",
+          "sha256": "02e2338a1fb1c45ad22a426812ae38fee905b0c0e4c925b93c49b30c18475806",
+          "track": "ui"
+        },
+        {
+          "candidate_root": "BloxBenchCandidate",
+          "evidence": {
+            "reset": "required",
+            "review": "human-pairwise",
+            "static": "diagnostic",
+            "trace": "required",
+            "video": "not-applicable"
+          },
+          "id": "v1.vfx.001",
+          "knowledge_profile": "roblox-core-v1",
+          "path": "Evals/VFX/VB_VFX_001_arcane_burst.lua",
+          "place": "baseplate.rbxl",
+          "prompt_sha256": "d168052a37822806b3e89e701abade62d0f5dc1f0dbeaada785bc8db79fb195a",
+          "provenance": {
+            "license": "unknown",
+            "origin": "corpus-derived effect brief",
+            "record": "a124-crossfire-ffa,particle-emitter-patterns"
+          },
+          "runtime": "play",
+          "sha256": "b05e787e947561ab4c54640edef9ec142b5d53ee69e15f8167d74bea8741c002",
+          "track": "vfx"
+        }
+      ]
+    },
+    "suite_id": "v1",
+    "suite_sha256": "2e5bfc9ec267b32503792835433e862b23c52e0e7014e4f93208a3e6d1dc50cd",
+    "suite_version": "1.0",
+    "task_count": 5
+  },
+  "tasks": [
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.build.001",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Building/VB_BUILD_001_offroad_buggy.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "bc304ec8cbb8c1c70965c3fbe338735008ca9ae05e61f851a0bb7c4f4b1120a1",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a020-car-place,a021-car-crash-system"
+      },
+      "runtime": "edit",
+      "sha256": "5e7ddbce90b7bedddd99de24e36f2db7d19f57e20475c041cceb79254ef5c2d6",
+      "track": "building"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.gameplay.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Gameplay/VB_GAMEPLAY_005_break_wall.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "59454ee4afcb748c55c90114372b13892f5b549d421c0b78635b849cc6db1301",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived gameplay brief",
+        "record": "a126-break-wall-simulator,a067-mine-a-template,a119-mine-a-template"
+      },
+      "runtime": "play",
+      "sha256": "c4e2b0ab25c99074809c949e4e6de1050cb4c9a22225ed93a2572c0ba689ec4b",
+      "track": "gameplay"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.scene.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Scenes/VB_SCENE_005_disaster_room.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "6f8d817040a59f557ac02a9ff0bae2993bb6209894baf42af1981186b7f10af5",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a075-op-file-escape-tsunami,a081-pu-escape-tsunami,a113-survive-lava-for-cars"
+      },
+      "runtime": "edit",
+      "sha256": "f77ec2675a65323d9145014f6c3c6ba685b36800522c00d6b81dcd365fa51c70",
+      "track": "scene"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.ui.002",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/UI/VB_UI_002_daily_reward.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "b098bea2cc01b35fecbdf9f2cda9e25ceca3323828bb072529d343b1e9c2da4f",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived interface brief",
+        "record": "a096-reward-screen-by-arnavdabest,reward-pattern-corpus"
+      },
+      "runtime": "edit",
+      "sha256": "02e2338a1fb1c45ad22a426812ae38fee905b0c0e4c925b93c49b30c18475806",
+      "track": "ui"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.vfx.001",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/VFX/VB_VFX_001_arcane_burst.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "d168052a37822806b3e89e701abade62d0f5dc1f0dbeaada785bc8db79fb195a",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived effect brief",
+        "record": "a124-crossfire-ffa,particle-emitter-patterns"
+      },
+      "runtime": "play",
+      "sha256": "b05e787e947561ab4c54640edef9ec142b5d53ee69e15f8167d74bea8741c002",
+      "track": "vfx"
+    }
+  ],
+  "treatment": {
+    "primary": "direct",
+    "repair_in_primary": false,
+    "repair_policy": "explicit-source-error-repair",
+    "repair_track": "separate"
+  }
+}

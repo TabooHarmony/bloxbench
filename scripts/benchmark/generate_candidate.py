@@ -19,6 +19,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -29,6 +30,42 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.benchmark.fixture_contract import parse_fixture  # noqa: E402
+from scripts.benchmark.suite_manifest import suite_reference  # noqa: E402
+
+def _load_hyper_key_from_dotenv() -> str | None:
+    "Try to load HYPER_API_KEY from a local .env without requiring the caller to export it."
+
+    if os.environ.get("HYPER_API_KEY"):
+        return os.environ["HYPER_API_KEY"]
+    for candidate in (ROOT / ".env", pathlib.Path("/root/bloxbench/.env") if False else ROOT / ".env"):
+        try:
+            text = candidate.read_text(encoding="utf-8", errors="ignore")
+        except FileNotFoundError:
+            continue
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            if key.strip() == "HYPER_API_KEY":
+                value = value.strip().strip('"').strip("'")
+                if value and value != "your-api-key-here":
+                    return value
+    # also try the canonical location even if ROOT differs
+    try:
+        text = pathlib.Path("/root/bloxbench/.env").read_text(encoding="utf-8", errors="ignore")
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            if key.strip() == "HYPER_API_KEY":
+                value = value.strip().strip('"').strip("'")
+                if value and value != "your-api-key-here":
+                    return value
+    except FileNotFoundError:
+        pass
+    return None
 
 DEFAULT_OUTPUT_ROOT = ROOT / "results" / "generated"
 BASE_URL = "https://hyper.charm.land/v1"
@@ -43,48 +80,31 @@ SYSTEM_PROMPT = (
     "No commentary outside the block."
 )
 
-# Grounded API cheat-sheet for generated code (see task 1 research:
-# Roblox/open-game-eval and imezx/luau-bench both constrain the API surface
-# to keep mid/small models from crashing on subtle engine rules).
-API_CHEAT_SHEET = """ROBLOX API RULES THAT BREAK GENERATED CODE (memorize these):
-
-1. ParticleEmitter.Attachment0 is READ-ONLY. You CANNOT assign it directly.
-   Instead: parent the ParticleEmitter to the Attachment (or a part with an
-   Attachment child), or set emitter.Attachment to an Attachment instance.
-   Correct pattern:
-     local attach = Instance.new("Attachment"); attach.Parent = part
-     local emitter = Instance.new("ParticleEmitter")
-     emitter.Parent = attach                -- NOT emitter.Attachment0 = attach
-
-2. Terrain:FillBlock is fragile and can silently no-op or error. Prefer
-   building scene geometry from Parts (Anchored = true). If you must use
-   terrain, call it with a Material enum and a valid region, treat its return
-   as a BasePart, and set properties on the RETURNED part, not the terrain.
-
-3. Only use these engine classes unless the fixture explicitly asks for more:
-   Model, Part, BasePart, Attachment, ParticleEmitter, PointLight,
-   SurfaceLight, Decal, UnionOperation, Script, LocalScript, ModuleScript,
-   Folder, StringValue, NumberValue, BoolValue, CFrame, Vector3, Color3,
-   BrickColor, NumberRange, NumberSequence, ColorSequence, Enum.*, math.*.
-   Avoid: Terrain, Lighting FX (Bloom/Blur/DepthOfField), tween service,
-   rays, sounds, Humanoid/Rig/Character manipulation.
-
-4. Every Part you create should set: Size (Vector3), CFrame or Position,
-   Anchored = true (unless you want physics), Material, and optionally
-   Color/BrickColor. Never leave a part at default size in the scene.
-
-5. Instance.new("Model") then set .Name, .Parent = workspace. Name is what
-   the evaluator searches for. Match component names EXACTLY as the prompt
-   lists them.
-
-6. Do not call workspace.CurrentCamera in setup() unless needed; camera
-   setup is the evaluator's job. If you do set it, use
-   camera.CameraType = Enum.CameraType.Scriptable then camera.CFrame.
-"""
+# Kept as a compatibility fallback for callers that import this module directly.
+# Generation runs load the versioned file under scripts/benchmark/knowledge/.
+API_CHEAT_SHEET = """Use documented Roblox APIs and follow the task-specific contract. Runtime behavior belongs in executable Script or LocalScript source. This fallback does not prohibit UI, animation, VFX, audio, input, Humanoids, rigs, physics, services, or client/server code."""
 
 
-def system_prompt_with_cheatsheet() -> str:
-    return SYSTEM_PROMPT + "\n\n" + API_CHEAT_SHEET
+KNOWLEDGE_ROOT = ROOT / "scripts" / "benchmark" / "knowledge"
+DEFAULT_KNOWLEDGE_PROFILE = "roblox-core-v1"
+
+
+def knowledge_profile_path(profile: str) -> Path:
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
+        raise ValueError(f"invalid knowledge profile: {profile!r}")
+    return KNOWLEDGE_ROOT / f"{profile}.txt"
+
+
+def load_knowledge_profile(profile: str = DEFAULT_KNOWLEDGE_PROFILE) -> str:
+    path = knowledge_profile_path(profile)
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"knowledge profile is not present: {path}") from exc
+
+
+def system_prompt_with_cheatsheet(profile: str = DEFAULT_KNOWLEDGE_PROFILE) -> str:
+    return SYSTEM_PROMPT + "\n\n" + load_knowledge_profile(profile)
 
 
 def make_prompt(fixture) -> str:
@@ -98,7 +118,7 @@ The evaluator will load your source as a ModuleScript and call these hooks
 when present: {", ".join(fixture.hooks) or "none"}.
 
 The final build must follow this contract:
-- create exactly one top-level Model named `BloxBenchCandidate` in workspace;
+- create exactly one top-level Model named `{fixture.candidate_root}` in workspace;
 - honor the fixture's semantic components and states;
 - report runtime facts through BloxBenchState / BloxBenchRuntime attributes
   or folders so the evaluator can read them back;
@@ -131,15 +151,67 @@ def extract_lua(text: str) -> str:
     return text[start:end].strip()
 
 
-def call_model(api_key: str, model_id: str, prompt: str, max_tokens: int, extra_system: str = "") -> tuple[str, dict[str, Any]]:
+def luau_syntax_errors(source: str) -> list[str]:
+    """Validate Luau syntax locally with luau-compile. Returns error lines (empty = OK).
+
+    A generated candidate that does not parse can never run in Studio, so
+    catching it here (vs. a wasted live run) is a strict win. Falls back to
+    [] on environments without luau-compile (best effort).
+    """
+    import subprocess
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False) as handle:
+        handle.write(source)
+        tmp_path = handle.name
+    try:
+        result = subprocess.run(
+            ["luau-compile", tmp_path],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return []
+    finally:
+        import os
+
+        os.unlink(tmp_path)
+    if result.returncode == 0:
+        return []
+    return [line for line in (result.stderr or "").splitlines() if line.strip()]
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build_system_prompt(knowledge_profile: str, extra_system: str = "") -> str:
+    base = system_prompt_with_cheatsheet(knowledge_profile)
+    return base + (("\n\n" + extra_system) if extra_system else "")
+
+
+def call_model(
+    api_key: str,
+    model_id: str,
+    prompt: str,
+    max_tokens: int,
+    extra_system: str = "",
+    knowledge_profile: str = DEFAULT_KNOWLEDGE_PROFILE,
+) -> tuple[str, dict[str, Any]]:
     from openai import OpenAI
 
     client = OpenAI(api_key=api_key, base_url=BASE_URL)
+    system_prompt = build_system_prompt(knowledge_profile, extra_system)
     started = time.monotonic()
     completion = client.chat.completions.create(
         model=model_id,
         messages=[
-            {"role": "system", "content": system_prompt_with_cheatsheet() + (("\n\n" + extra_system) if extra_system else "")},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         max_tokens=max_tokens,
@@ -157,21 +229,59 @@ def call_model(api_key: str, model_id: str, prompt: str, max_tokens: int, extra_
         "elapsed_seconds": elapsed,
         "usage": usage,
         "finish_reason": completion.choices[0].finish_reason,
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+        "system_prompt_sha256": hashlib.sha256(system_prompt.encode("utf-8")).hexdigest(),
+        "knowledge_profile": knowledge_profile,
+        "knowledge_sha256": hashlib.sha256(load_knowledge_profile(knowledge_profile).encode("utf-8")).hexdigest(),
     }
     return text, meta
 
 
-def write_manifest(arm_dir: Path, fixture, model_id: str, meta: dict[str, Any], source_text: str) -> Path:
+def write_manifest(
+    arm_dir: Path,
+    fixture,
+    model_id: str,
+    meta: dict[str, Any],
+    source_text: str,
+    *,
+    treatment: str,
+    repair: dict[str, Any],
+    suite: dict[str, str] | None = None,
+) -> Path:
     manifest = {
-        "schema": "bloxbench-generation-v1",
+        "schema": "bloxbench-generation-v2",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "model": MODELS[model_id]["id"],
         "model_name": MODELS[model_id]["name"],
         "provider": "charm-hyper",
         "provider_id": "charm-hyper",
         "base_url": BASE_URL,
+        "generator": {
+            "path": str(Path(__file__).resolve()),
+            "sha256": file_sha256(Path(__file__).resolve()),
+        },
+        "tool_surface": {"protocol": "openai-chat-completions", "tools": []},
+        "decoding": {
+            "max_output_tokens": MODELS[model_id]["max_tokens"],
+            "temperature": None,
+            "top_p": None,
+            "seed": None,
+        },
+        "prompt_order": ["system", "user"],
+        "repair_policy": "explicit-source-error-repair" if repair.get("is_repaired") else "direct-only",
         "fixture": fixture.fixture_id,
-        "prompt_sha256": hashlib.sha256(fixture.prompt.encode("utf-8")).hexdigest(),
+        "fixture_sha256": fixture.sha256,
+        "fixture_prompt_sha256": hashlib.sha256(fixture.prompt.encode("utf-8")).hexdigest(),
+        "suite": suite,
+        "prompt_sha256": meta.get("prompt_sha256"),
+        "system_prompt_sha256": meta.get("system_prompt_sha256"),
+        "knowledge_profile": meta.get("knowledge_profile", fixture.knowledge_profile),
+        "knowledge_sha256": meta.get("knowledge_sha256"),
+        "task_provenance": fixture.provenance,
+        "prompt_path": "prompt.txt",
+        "system_prompt_path": "system_prompt.txt",
+        "treatment": treatment,
+        "repair": repair,
         "is_model_evaluation": True,
         "usage": meta.get("usage", {}),
         "elapsed_seconds": meta.get("elapsed_seconds"),
@@ -221,6 +331,7 @@ Return the COMPLETE corrected Luau source in a single ```lua block.
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixture", required=True, type=Path)
+    parser.add_argument("--suite-manifest", type=Path, help="locked suite manifest to verify and record")
     parser.add_argument("--model", choices=sorted(MODELS), default="flash")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--no-run", action="store_true", help="parse fixture and print the prompt only")
@@ -235,19 +346,28 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="exact runtime error text from the failed run (repair mode)",
     )
+    parser.add_argument(
+        "--repair-attempt",
+        type=int,
+        default=1,
+        help="1-based repair attempt number for provenance",
+    )
     args = parser.parse_args(argv)
 
-    api_key = os.environ.get("HYPER_API_KEY")
+    api_key = _load_hyper_key_from_dotenv()
     if not api_key and not args.no_run:
         raise SystemExit("HYPER_API_KEY must be in the environment (never written to artifacts)")
     assert isinstance(api_key, str) or args.no_run
     api_key_str = api_key or ""
 
     fixture = parse_fixture(args.fixture)
+    suite = suite_reference(args.suite_manifest, fixture.fixture_id, fixture.sha256) if args.suite_manifest else None
 
     repair_mode = args.repair_source is not None
     if repair_mode and not args.repair_error:
         raise SystemExit("--repair-source requires --repair-error (the runtime error text)")
+    if args.repair_attempt < 1:
+        raise SystemExit("--repair-attempt must be at least 1")
 
     original = ""
     if repair_mode:
@@ -258,34 +378,75 @@ def main(argv: list[str] | None = None) -> int:
         extra_system = ""
 
     arm_dir = args.output_root / fixture.fixture_id.replace(".", "_") / f"arm-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
-    arm_dir.mkdir(parents=True, exist_ok=True)
-    (arm_dir / "generation").mkdir(parents=True, exist_ok=True)
-    (arm_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+    generation_dir = arm_dir / "generation"
+    generation_dir.mkdir(parents=True, exist_ok=True)
+    (generation_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+    system_prompt = build_system_prompt(fixture.knowledge_profile, extra_system)
+    (generation_dir / "system_prompt.txt").write_text(system_prompt, encoding="utf-8")
 
     if args.no_run:
-        print(json.dumps({"arm_dir": str(arm_dir), "prompt": prompt}, indent=2))
+        print(json.dumps({"arm_dir": str(arm_dir), "prompt": prompt, "suite": suite}, indent=2))
         return 0
 
     model_id = MODELS[args.model]["id"]
-    raw, meta = call_model(api_key_str, model_id, prompt, MODELS[args.model]["max_tokens"], extra_system=extra_system)
+    raw, meta = call_model(
+        api_key_str,
+        model_id,
+        prompt,
+        MODELS[args.model]["max_tokens"],
+        extra_system=extra_system,
+        knowledge_profile=fixture.knowledge_profile,
+    )
     source_text = extract_lua(raw)
 
     if not source_text:
         raise SystemExit(f"model returned no usable source. raw response: {raw[:200]!r}")
 
+    syntax_errors = luau_syntax_errors(source_text)
+    if syntax_errors:
+        raise SystemExit(
+            "model returned source that does not parse: "
+            + "; ".join(syntax_errors[:4])
+        )
+
     if repair_mode:
         source_path = arm_dir / "source" / "candidate.repaired.luau"
         source_path.parent.mkdir(parents=True, exist_ok=True)
         source_path.write_text(source_text, encoding="utf-8")
-        manifest_path = write_manifest(arm_dir, fixture, args.model, meta, source_text)
+        parent_source_sha256 = hashlib.sha256(original.encode("utf-8")).hexdigest()
+        repair_info = {
+            "is_repaired": True,
+            "attempt": args.repair_attempt,
+            "parent_arm_id": args.repair_source.parents[1].name if len(args.repair_source.parents) > 1 else None,
+            "parent_source_path": str(args.repair_source),
+            "parent_source_sha256": parent_source_sha256,
+            "error_sha256": hashlib.sha256(args.repair_error.encode("utf-8")).hexdigest(),
+        }
+        manifest_path = write_manifest(
+            arm_dir,
+            fixture,
+            args.model,
+            meta,
+            source_text,
+            treatment="repaired",
+            repair=repair_info,
+            suite=suite,
+        )
         repair_manifest = {
-            "schema": "bloxbench-repair-v1",
+            "schema": "bloxbench-repair-v2",
             "repaired_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "model": MODELS[args.model]["id"],
             "fixture": fixture.fixture_id,
+            "suite": suite,
+            "attempt": args.repair_attempt,
+            "parent_arm_id": repair_info["parent_arm_id"],
             "original_source": str(args.repair_source),
-            "original_source_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
-            "error_text": args.repair_error[:1500],
+            "original_source_sha256": parent_source_sha256,
+            "error_sha256": repair_info["error_sha256"],
+            "knowledge_profile": fixture.knowledge_profile,
+            "knowledge_sha256": meta.get("knowledge_sha256"),
+            "prompt_sha256": meta.get("prompt_sha256"),
+            "system_prompt_sha256": meta.get("system_prompt_sha256"),
             "repair_manifest": str(manifest_path),
         }
         repair_path = arm_dir / "repair" / "manifest.json"
@@ -295,7 +456,16 @@ def main(argv: list[str] | None = None) -> int:
         source_path = arm_dir / "source" / "candidate.luau"
         source_path.parent.mkdir(parents=True, exist_ok=True)
         source_path.write_text(source_text, encoding="utf-8")
-        manifest_path = write_manifest(arm_dir, fixture, args.model, meta, source_text)
+        manifest_path = write_manifest(
+            arm_dir,
+            fixture,
+            args.model,
+            meta,
+            source_text,
+            treatment="direct",
+            repair={"is_repaired": False, "attempt": 0},
+            suite=suite,
+        )
         repair_path = None
 
     print(

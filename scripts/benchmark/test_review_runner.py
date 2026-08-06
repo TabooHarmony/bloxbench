@@ -9,10 +9,74 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.benchmark.fixture_contract import parse_fixture
-from scripts.benchmark.review_runner import camera_code, copy_video, run_review, screenshot_angle_names
+from scripts.benchmark.review_runner import (
+    attach_presentation_artifacts,
+    camera_code,
+    copy_video,
+    initial_manifest,
+    run_review,
+    screenshot_angle_names,
+)
 
 
 class ReviewRunnerTests(unittest.TestCase):
+    def test_initial_manifest_marks_presentation_only_evidence(self) -> None:
+        fixture = parse_fixture("Evals/Scenes/VB_SCENE_001_waterfall_landmark.lua")
+        fixture = replace(
+            fixture,
+            evidence={**fixture.evidence, "static": "not-applicable"},
+            screenshot_type="",
+            screenshot_angles=0,
+        )
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            source = root / "candidate.luau"
+            source.write_text("return Instance.new('Folder')\n", encoding="utf-8")
+            manifest = initial_manifest(
+                fixture,
+                source,
+                root / "run",
+                generation={"is_model_evaluation": True},
+            )
+        self.assertFalse(manifest["screenshot_contract"]["enabled"])
+        self.assertEqual(manifest["screenshot_contract"]["angle_names"], [])
+        self.assertEqual(manifest["presentation_artifacts"], [])
+        self.assertFalse(manifest["evidence_summary"]["quality_scored"])
+        self.assertTrue(manifest["evidence_summary"]["diagnostic_only"])
+
+    def test_missing_declared_starter_place_fails_before_studio_work(self) -> None:
+        fixture = parse_fixture("Evals/Scenes/VB_SCENE_001_waterfall_landmark.lua")
+        fixture = replace(fixture, place="starters/missing.rbxl")
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            source = root / "candidate.luau"
+            source.write_text("return Instance.new('Folder')\n", encoding="utf-8")
+            with self.assertRaisesRegex(FileNotFoundError, "declared starter place"):
+                run_review(fixture, source, root / "run", plan_only=True)
+
+    def test_attach_presentation_artifacts_accepts_binary_media(self) -> None:
+        fixture = parse_fixture("Evals/Scenes/VB_SCENE_001_waterfall_landmark.lua")
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            run_dir = root / "run"
+            source = root / "candidate.luau"
+            source.write_text("return Instance.new('Folder')\n", encoding="utf-8")
+            manifest = initial_manifest(
+                fixture,
+                source,
+                run_dir,
+                generation={"is_model_evaluation": True},
+            )
+            manifest["state"] = "completed"
+            manifest["evidence_state"] = "static evidence complete"
+            run_dir.mkdir(parents=True)
+            (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            artifact = root / "game-view.webm"
+            artifact.write_bytes(b"\\x00binary-media")
+            result = attach_presentation_artifacts(run_dir, (artifact,))
+            self.assertEqual(result.manifest["presentation_artifacts"][0]["name"], "game-view.webm")
+            self.assertTrue((run_dir / "presentation" / "artifact-0.webm").is_file())
+
     def test_full_edit_pipeline_with_fake_transport(self) -> None:
         fixture = parse_fixture("Evals/Scenes/VB_SCENE_001_waterfall_landmark.lua")
         with tempfile.TemporaryDirectory() as raw:
@@ -77,7 +141,7 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(result.state, "completed_unexported")
             self.assertEqual(result.evidence_state, "static evidence complete; generated place missing")
             self.assertNotIn("play_start", calls)
-            expected_screenshots = 1 + len(fixture.states or ["capture"]) * fixture.screenshot_angles
+            expected_screenshots = 1 + len(fixture.states or []) * fixture.screenshot_angles
             self.assertEqual(calls.count("screenshot"), expected_screenshots)
             manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["state"], "completed_unexported")

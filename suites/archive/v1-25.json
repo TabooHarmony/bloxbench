@@ -1,0 +1,579 @@
+{
+  "expected_task_count": 25,
+  "schema": "bloxbench-suite-v1",
+  "sha256": "b5188aa646f34c0853846bf24968481cd0e25fec82eece1af93666c74410c3fd",
+  "suite_id": "v1",
+  "suite_version": "1.0",
+  "task_count": 25,
+  "tasks": [
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "required",
+        "trace": "required",
+        "video": "optional"
+      },
+      "id": "control.lucky-block",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Gameplay/VB_GAMEPLAY_002_lucky_block.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "e24e71742d6a42e755702ff812bfff173fc4f665158ff4e75ed26a2b5de4b217",
+      "provenance": {
+        "origin": "hand-authored"
+      },
+      "runtime": "play",
+      "sha256": "9aaa050f424e23659d0e575b506da2cd56548fa419fda8422d6fc78c9439efe2",
+      "track": "control"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "required",
+        "trace": "required",
+        "video": "optional"
+      },
+      "id": "pilot.grapple",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Gameplay/VB_GAMEPLAY_001_grapple_traversal_course.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "c6b9befef78c4c39b229bdb52fc4fdb107deff04ba5534b0c7084de1e72e458f",
+      "provenance": {
+        "origin": "hand-authored"
+      },
+      "runtime": "play",
+      "sha256": "8e6e07fd60f6203d5be27acd312dfbdff33f5f8b029b3240d268afecd6f6d2e7",
+      "track": "gameplay"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "required",
+        "trace": "required",
+        "video": "optional"
+      },
+      "id": "pilot.waterfall",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Scenes/VB_SCENE_001_waterfall_landmark.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "457b2f6c34dd6037db5b111dbfab409b430ee50bf7eb1bc69543a1160296284c",
+      "provenance": {
+        "origin": "hand-authored"
+      },
+      "runtime": "edit",
+      "sha256": "797d3b99a5874a014a2c04988f82b64b1be57b6d8d069b651c2e71692d461152",
+      "track": "scene"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.build.001",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Building/VB_BUILD_001_offroad_buggy.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "bc304ec8cbb8c1c70965c3fbe338735008ca9ae05e61f851a0bb7c4f4b1120a1",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a020-car-place,a021-car-crash-system"
+      },
+      "runtime": "edit",
+      "sha256": "5e7ddbce90b7bedddd99de24e36f2db7d19f57e20475c041cceb79254ef5c2d6",
+      "track": "building"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.build.002",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Building/VB_BUILD_002_fighter_jet.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "7ca1a2c3ef49592778500c683369b3e65a652949f2e221b30350361552752ecd",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a016-build-a-plane,a017-build-a-plane"
+      },
+      "runtime": "edit",
+      "sha256": "60098b96a02fe105585b4878da87a8a78a129d283e4f05a4b23af890557db564",
+      "track": "building"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.build.003",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Building/VB_BUILD_003_arsenal_rack.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "78bb167541df29d9a7b05e26c0f8d1b0ceed090e6b36e18cdc204f6ebc524b46",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a054-hiddenville-gun-system,a055-hood-gun-system"
+      },
+      "runtime": "edit",
+      "sha256": "5755015bfbdb3cc8f4098766cbb779642be7513f61e3717613c42e034cab922a",
+      "track": "building"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.build.004",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Building/VB_BUILD_004_dragon_statue.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "68a9af6e4e68e1fca5572583f612b7b80e3e54990b2131741c2be31111ff5acb",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a026-combat-omega,a047-gag-v8,a048-garden-horizons"
+      },
+      "runtime": "edit",
+      "sha256": "92537a2c8a9e6db5cd8c87c1c7e402315462e6721cd9c16d4c4b7bbaf8aec427",
+      "track": "building"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.build.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Building/VB_BUILD_005_watchtower.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "06e1ee8563f6594f84b06ae39f99219eda7bb1a3ee20a24e31d71b54d361739b",
+      "provenance": {
+        "license": "unknown",
+        "origin": "research-spatial-relation pilot",
+        "record": "watchtower-relation-pilot"
+      },
+      "runtime": "edit",
+      "sha256": "56d54ce6f4656fe49a36912c158479970f93a4bcfd7cc2f0f6e28b0ebf09b4f6",
+      "track": "building"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.gameplay.003",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Gameplay/VB_GAMEPLAY_003_shooting_range.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "f02e58a2f868a79680127b09824289199a05ebe98d00cc175e623dbde418c2ca",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived gameplay brief",
+        "record": "a124-crossfire-ffa,a046-fully-working-fps-game,a109-sniper-game"
+      },
+      "runtime": "play",
+      "sha256": "af2dfeeec36e14b3150e964a67cadba0d5832091d6a027bedfd1941877c1c1b0",
+      "track": "gameplay"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.gameplay.004",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Gameplay/VB_GAMEPLAY_004_crash_playground.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "4f5f5f060023bea4a00d5025aa921616dd096446828a8a40718268ee19bebd6b",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived gameplay brief",
+        "record": "a021-car-crash-system,a020-car-place"
+      },
+      "runtime": "play",
+      "sha256": "f1d62da35a7e4b465bf5dbb4ff04c4d430f2804a113bf28b6d8c756ace70f4a7",
+      "track": "gameplay"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.gameplay.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Gameplay/VB_GAMEPLAY_005_break_wall.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "59454ee4afcb748c55c90114372b13892f5b549d421c0b78635b849cc6db1301",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived gameplay brief",
+        "record": "a126-break-wall-simulator,a067-mine-a-template,a119-mine-a-template"
+      },
+      "runtime": "play",
+      "sha256": "c4e2b0ab25c99074809c949e4e6de1050cb4c9a22225ed93a2572c0ba689ec4b",
+      "track": "gameplay"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.scene.002",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Scenes/VB_SCENE_002_night_market.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "6d37ab94148ad3f9e237e70d42d26f721e02e8b40cd60012999c58062d9e87d3",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a006-ai-test,urban-shop-patterns"
+      },
+      "runtime": "edit",
+      "sha256": "5c60db0cfcabda148149dc4d954397ce048e2dafb1748cc1c87663e534f54000",
+      "track": "scene"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.scene.003",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Scenes/VB_SCENE_003_space_station.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "e361f90138fe58f0cb556c79756668dc2c2d659118ef4389cfdaea4d91c7b14d",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a032-deepwoken,a052-hellverse,a053-hellverse"
+      },
+      "runtime": "edit",
+      "sha256": "f5688cbf2cb242f2de64aea3b15d843ebb07861a45efdd4caf7e3240bbf6f295",
+      "track": "scene"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.scene.004",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Scenes/VB_SCENE_004_jungle_temple.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "2a984c764686a4c7662cc21fb7bff69750a98f866335c60819a5825cf8813e8a",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a009-map-evidence,a010-map-evidence,a011-map-evidence,a012-map-evidence"
+      },
+      "runtime": "edit",
+      "sha256": "5c04842cc91c4a2f634192c8a4f016f22a3c412819e8935930f85d70bdee3c5c",
+      "track": "scene"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.scene.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/Scenes/VB_SCENE_005_disaster_room.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "6f8d817040a59f557ac02a9ff0bae2993bb6209894baf42af1981186b7f10af5",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived design brief",
+        "record": "a075-op-file-escape-tsunami,a081-pu-escape-tsunami,a113-survive-lava-for-cars"
+      },
+      "runtime": "edit",
+      "sha256": "f77ec2675a65323d9145014f6c3c6ba685b36800522c00d6b81dcd365fa51c70",
+      "track": "scene"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.ui.001",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/UI/VB_UI_001_inventory.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "48c19c2647f55fcbe85b82c6ec3ee246cf3b85a48ae7956f76164a75e4757d98",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived interface brief",
+        "record": "a001-40-pet-system,a022-charactercustom,a023-clickerkit"
+      },
+      "runtime": "edit",
+      "sha256": "b8ce1bb95461c84d94b65bee02f9096f82f947d3a7b0b75163ceb0ee0250c507",
+      "track": "ui"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.ui.002",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/UI/VB_UI_002_daily_reward.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "b098bea2cc01b35fecbdf9f2cda9e25ceca3323828bb072529d343b1e9c2da4f",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived interface brief",
+        "record": "a096-reward-screen-by-arnavdabest,reward-pattern-corpus"
+      },
+      "runtime": "edit",
+      "sha256": "02e2338a1fb1c45ad22a426812ae38fee905b0c0e4c925b93c49b30c18475806",
+      "track": "ui"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.ui.003",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/UI/VB_UI_003_trade_window.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "70e10f6dae8fa8f78067f53a1acae8b122e4abaf7c1930bd23a5dfc021e0f4bd",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived interface brief",
+        "record": "trade-inventory-patterns,a001-40-pet-system"
+      },
+      "runtime": "edit",
+      "sha256": "d2f318c36d540506e5c67fa646648e89e76b718e1ff051b7a0774fc8ba162a0e",
+      "track": "ui"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.ui.004",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/UI/VB_UI_004_settings_topbar.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "2e4a47411beb9cdd7100a32040896f65660a94ddcf32ab85087a566392f1954a",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived interface brief",
+        "record": "a103-settings-topbar,a056-invitefriendtopbar"
+      },
+      "runtime": "edit",
+      "sha256": "34627fefcd7633a330dd31d5f82dad0d38192b1c0cb55cbd754d9d93ce253564",
+      "track": "ui"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "not-applicable",
+        "video": "not-applicable"
+      },
+      "id": "v1.ui.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/UI/VB_UI_005_shop.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "831abacbfffaf153d76c163c79a924a919c1e8ee25753f50ffbc4feaed8ff5be",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived interface brief",
+        "record": "a049-gtagunshopsystem,a115-tycoonwithrebirths-1,a123-youtube-simulator-fixed-working"
+      },
+      "runtime": "edit",
+      "sha256": "a889fb219e97e58691cc422220e6e902247a4dc6b873ceaad8fbd84677674430",
+      "track": "ui"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.vfx.001",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/VFX/VB_VFX_001_arcane_burst.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "d168052a37822806b3e89e701abade62d0f5dc1f0dbeaada785bc8db79fb195a",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived effect brief",
+        "record": "a124-crossfire-ffa,particle-emitter-patterns"
+      },
+      "runtime": "play",
+      "sha256": "b05e787e947561ab4c54640edef9ec142b5d53ee69e15f8167d74bea8741c002",
+      "track": "vfx"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.vfx.002",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/VFX/VB_VFX_002_lightning.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "726b9d1464d8facd691ba9482668000d4624b049566d9505402ff4bb7f4494ab",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived effect brief",
+        "record": "lightning-pattern-corpus"
+      },
+      "runtime": "play",
+      "sha256": "11480d17bc939ee9d5c26d8c4c76135e99ee749061e6ca8110ca775fe2b79a1a",
+      "track": "vfx"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.vfx.003",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/VFX/VB_VFX_003_energy_beam.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "97e9b27007ce7f97a21acf7016bbc51a55007ad405ec3af85da22044c1c36904",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived effect brief",
+        "record": "a006-ai-test,a061-kaizen,a116-type-soul"
+      },
+      "runtime": "play",
+      "sha256": "d5fe9aa953549297a9e9b48227bd9785149055088fe2b332327d8b550a43ee54",
+      "track": "vfx"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.vfx.004",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/VFX/VB_VFX_004_charge_glow.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "89892704827257d0a1df3be8762df5906f0a2536c3a9e4c38cdaf4acb97d0840",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived effect brief",
+        "record": "a005-advanced-gun-system-3-0,a094-realistic-advanced-gun-system"
+      },
+      "runtime": "play",
+      "sha256": "730d942b94f15282617fcb90e9bb695acfda1272cf388983afaaf6212cb041a7",
+      "track": "vfx"
+    },
+    {
+      "candidate_root": "BloxBenchCandidate",
+      "evidence": {
+        "reset": "required",
+        "review": "human-pairwise",
+        "static": "diagnostic",
+        "trace": "required",
+        "video": "not-applicable"
+      },
+      "id": "v1.vfx.005",
+      "knowledge_profile": "roblox-core-v1",
+      "path": "Evals/VFX/VB_VFX_005_portal.lua",
+      "place": "baseplate.rbxl",
+      "prompt_sha256": "0aa7be496adcf23d45f2beb5a66ac5fbbcb99d1ebb5d99eb4a52db1a35a9fc77",
+      "provenance": {
+        "license": "unknown",
+        "origin": "corpus-derived effect brief",
+        "record": "a013-brainrot-rng-v1-0,a097-rng-1,a118-upd-6-gamzzs-rng-1"
+      },
+      "runtime": "play",
+      "sha256": "0a33b7a840255e63c9d386c45cbcfffe1e35bd539363b453a28c8f8790dbf0c1",
+      "track": "vfx"
+    }
+  ]
+}
