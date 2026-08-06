@@ -1,28 +1,146 @@
 ROBLOX CORE KNOWLEDGE PROFILE v1
-Use documented Roblox APIs and the exact task contract. This profile is shared public context, not a quality score.
+Comprehensive, distilled from your roblox-brain (29 skills, ~9.4k lines across SKILL.md + references/full.md, grounded in Creator Hub docs) and from the local corpus triage (126 parsed artifacts, 9.2M instances, 70k scripts, 11.7M nonblank Luau lines). Use documented APIs only. This profile is shared context, not a quality score. If a fixture states an exact name, value, or type, that fixture wins over this profile.
+
+HOW TO READ THIS FILE
+- The benchmark prompt section inside each fixture already lists exactInstance names, attribute keys, state strings, and envelope guidance. Treat this profile as the "don't hallucinate Roblox" layer underneath it.
+- Prefer Instance.new with explicit Parent, Size/CFrame, Anchored, Color/Material over guessing defaults.
+- This profile does not prohibit UI, animation, VFX, audio, input, Humanoids, rigs, physics, services, or client/server code — use task-specific rules when those capabilities are required.
 
 EXECUTION MODEL
-- Static construction may happen in the candidate module setup hook.
-- Runtime behavior must live in the Source of an executable Script or LocalScript placed in the candidate, unless the task explicitly defines another runtime boundary.
-- Do not put runtime listeners or state-machine transitions only in an edit-time setup function. Those connections will not survive into play.
+- Static build may run in the candidate ModuleScript's setup/load hook (edit-time).
+- Runtime behavior MUST live in the Source of a Script or LocalScript you create inside BloxBenchCandidate. The evaluator runs that source in play. Code left only in setup will not run.
+- Create exactly one top-level Model named BloxBenchCandidate in workspace. Put every semantic component inside it as an Instance (not an Attribute). FindFirstChild(name, true) is how you are checked.
+- For camera, animation, or input that must be client-visible, use a Script with RunContext=Client or a LocalScript placed where it will run, and set Camera.CameraType appropriately. Server scripts silently drop camera writes.
+- Do not yield indefinitely at top level (infinite while true + wait without bound). Use finite tweens or Debris for lifetimes.
 
-API DISCIPLINE
-- Use valid Roblox classes, properties, enums, and service APIs. Do not invent names.
-- Match exact state and component names from the task contract.
-- BasePart uses Transparency, not Visible. UI visibility belongs to GuiObject.Visible.
-- Set Size and a meaningful CFrame or Position on created parts. Set Anchored deliberately.
-- ParticleEmitter effects are normally parented to an Attachment or BasePart. Do not assign read-only properties.
-- Preserve the task's requested capability. This profile does not prohibit UI, animation, VFX, audio, input, Humanoids, rigs, physics, services, or client/server code. Use the task-specific rules when those capabilities are required.
+LUAU CORE — TRAPS THAT BREAK STUDIO
+- Only false and nil are falsy. 0, "", {} are truthy. Use == and ~=, no coercion.
+- Tables: {} starts unsealed; annotating seals it. Don't add fields after sealing. Use brackets for dynamic keys: t[field], not t.field when field is a variable.
+- Use `if value == nil then default else value` when false is valid; `value or default` clobbers false.
+- Prefer `if cond then a else b` over `cond and a or b` when a can be false/nil.
+- Length # only for contiguous 1-based sequences. Gaps break it. Use table.remove for middle deletes.
+- Close every connection/task you own. Corpus: 115/126 artifacts mention cleanup and 121 use wait — leaks are the norm in the wild, not a pattern to copy. Parent temporary instances and Destroy or Debris:AddItem them.
+- Wrap risky calls (CSG, DataStore if you ever use it) in pcall. pcall returns (ok, result).
+- Use Vector3.new(x,y,z), CFrame.new / CFrame.lookAt / CFrame.Angles, Color3.fromRGB, UDim2.fromScale/fromOffset correctly. Don't invent constructors.
 
-BENCHMARK CONTRACT CONVENTIONS (authoritative for BloxBench)
-- Semantic components are Instance objects with EXACT names (e.g. BreakBounds, SceneRoot, RewardPanel) placed inside the single top-level Model BloxBenchCandidate. A component is NOT an Attribute on the model — it must be an Instance you create with Instance.new and Parent = model (or descendant). The evaluator finds them with FindFirstChild(name, true).
-- For play/runtime fixtures, state and readback live at fixed keys the evaluator reads:
-  * BloxBenchCandidate:SetAttribute("BloxBenchState", stateString) — exact case-sensitive values named in the task (e.g. Intact/Damaged/Broken, Idle/Burst).
-  * BloxBenchRuntime folder (or descendant): attributes like reward_visible, opening_visible, effect_active are SetAttribute on that folder with boolean values.
-  * BloxBenchTrace folder (or descendant): attribute last_command (or last_event) set to the exact command string just handled ("damage","break","reset","trigger", ...). One attribute, updated on every command.
-  Do not invent attribute names like State, Trace, RewardVisible.
-- Bounds instances (BreakBounds, SceneBounds, DisplayBounds, UiBounds, EffectBounds) declare the review footprint. Keep them roughly: BreakBounds ~10-48 wide, 8-40 deep; SceneBounds 24-64 square; DisplayBounds 8-36 wide, 6-30 deep; UiBounds 8-40 wide, 2-28 deep; EffectBounds <=32 square (compact). X and Z are the floor footprint; Y/thickness can be small. Staying in these windows keeps the build reviewable from one fixed camera — it is not a quality score.
-- UI fixtures are world-space: WorldAnchor and UiBounds are Parts; RewardPanel/DayProgress/ClaimedState/AvailableState/PrimaryAction/CalendarIcon are GuiObjects (Frame/TextLabel/TextButton/ImageLabel) inside a BillboardGui or SurfaceGui whose Adornee is WorldAnchor. Do not make every UI name a Part.
-- Keep the candidate under the declared root instance and use the exact semantic names from the task.
-- Expose only the narrow state/readback contract requested by the task. Runtime observations explain the result; they do not establish visual or gameplay quality.
-- Do not add unrelated systems merely to inflate the artifact.
+INSTANCE & HIERARCHY
+- Create with: local p = Instance.new("Part"); p.Name="ExactName"; p.Size=Vector3.new(4,1,4); p.CFrame=CFrame.new(0,2,0); p.Anchored=true; p.Parent=model
+- Model hierarchy: Model -> Folder/Part/Model children. Use Model:PivotTo(CFrame) or SetPrimaryPartCFrame only after model has a PrimaryPart or use PivotTo.
+- Find: model:FindFirstChild("ExactName", true) is recursive. Exact spelling and case matter.
+- Attributes: SetAttribute(key, value) where key is exact string. BloxBench keys are case-sensitive and lower_snake for runtime (reward_visible) vs PascalCase for state enum (Intact/Damaged/Broken).
+- BindableEvent for commands (play fixtures): Instance.new("BindableEvent"); evt.Name="BreakInput" (exact); evt.Parent=candidate; evt.Event:Connect(function(cmd) ... end); Fire with evt:Fire("damage") in tests — you only need to handle Event.
+- Never store Instances, functions, threads, or cyclic tables in Attributes or DataStores. Primitives only.
+
+GEOMETRY & SPATIAL
+- Every BasePart needs Size (Vector3) and meaningful CFrame. Snap sizes to 0.125/0.25/0.5 to avoid gaps. Player scale: ~5 studs tall, door 4w x 7h, path 6+ wide. Keeps you in envelope.
+- Anchored: true for static props/shells, false only if physics is intended. Both Attachment0 and Attachment1 are required for constraints; Anchored parts ignore constraints.
+- Part shape: Block, Ball, Cylinder (cylinder extends along X — rotate 90 deg to stand upright). WedgePart, CornerWedgePart distinct classes.
+- CSG (UnionOperation/SubtractAsync) is async and can fail. Use pcall, build near origin then PivotTo, keep trees shallow, use epsilon 0.05 when cutter must pass through wall, set CollisionFidelity=Box for decor.
+- MeshPart: verify MeshId/MeshContent, handle SurfaceAppearance/ColorMap separately, and set CollisionFidelity explicitly. Corpus shows MeshPart in 107/126 artifacts (333k instances) and Texture 104/126 — mesh is common in the wild, but primitives are safer for one-shot builds unless you have a real mesh id.
+- Always set Color (Color3) and Material (Enum.Material.*) explicitly — default gray is a tell and hides intent. Valid materials include SmoothPlastic, Plastic, Wood, Metal, Glass, Grass, Slate, Concrete, Granite, Brick, Neon, ForceField, etc. — check Enum.Material docs; do not invent "Leaf".
+
+CFrame ESSENTIALS
+- CFrame.new(pos), CFrame.lookAt(at, lookAt, up?), CFrame.Angles(rx,ry,rz), CFrame.fromAxisAngle(axis, angle). Use :Lerp(goal, alpha), :Inverse(), :ToWorldSpace().
+- Properties: Position, LookVector (-Z), RightVector (X), UpVector (Y). Multiply: localWorldPos = anchorCFrame * Vector3.new(0,2,0) or anchorCFrame * CFrame.new(offset).
+- For camera: CameraType=Scriptable then PreRender loop with :Lerp. Never set camera in a server Script.
+- Place child parts relative to anchor CFrame, not hardcoded world coordinates. Read back existing CFrame if you need it.
+
+MATERIAL, COLOR, LIGHTING
+- Part.Color = Color3.fromRGB(r,g,b); Part.Material = Enum.Material.Grass; UsePartColor = true when needed.
+- Lighting: game:GetService("Lighting").ClockTime/Brightness/Ambient/OutdoorAmbient/EnvironmentDiffuseScale etc. Atmosphere parented to Lighting with Density/Offset/Color/Decay/Glare/Haze. Post-effects (BloomEffect, SunRays, BlurEffect, ColorCorrectionEffect) parent to Lighting.
+- Shadows: Lighting.GlobalShadows, ShadowSoftness. Don't invent Lighting.Tech.
+
+UI — WORLD-SPACE (critical for BloxBench UI fixtures)
+- Container choice: BillboardGui (camera-facing 3D label) or SurfaceGui (on part face). Both require an Adornee Part. Do NOT put WorldAnchor/UiBounds as ScreenGui in PlayerGui for these fixtures — they are Parts.
+- Pattern: local bb = Instance.new("BillboardGui"); bb.Name="Gui"; bb.Adornee=worldAnchorPart; bb.Size=UDim2.fromScale(4,2) or .Size+StudsOffset; bb.AlwaysOnTop=false; bb.Parent=worldAnchorPart
+  Then inside: local panel=Instance.new("Frame"); panel.Size=UDim2.fromScale(1,1); panel.BackgroundColor3=...; panel.Parent=bb
+  Labels/Buttons are TextLabel/TextButton/ImageLabel inside that Frame.
+- Layout: UIListLayout/UIGridLayout + UIPadding own repetition. Use Scale for responsive outer region, Offset for padding. Give every interactive control Selectable=true and a GuiService.SelectedObject entry for gamepad.
+- Text: one policy per region — fixed TextSize with UITextSizeConstraint, or TextScaled with bounds, or AutomaticSize with parent room. Test long strings.
+- Scrolling: ScrollingFrame with AutomaticCanvasSize=Y + UIListLayout inside.
+- Visibility: GuiObject.Visible (not Transparency on UI). BasePart uses Transparency (0-1), not Visible.
+- Do not grant state because a local button fired. For these offline fixtures the button just sets the attribute/state locally; that's fine — but in real games server validates.
+
+VFX, PARTICLES, BEAMS, TWEEN
+- ParticleEmitter parented to Attachment or BasePart. Burst: Rate=0 then :Emit(count) with finite Lifetime. Don't assign read-only Attachment0.
+- Beam/Trail need two Attachments with stable world relation and a cleanup owner.
+- TweenService:Create(obj, TweenInfo.new(duration, EasingStyle, EasingDirection), {Property=value}):Play(); cancel/replace previous tween on state change.
+- Debris:AddItem(obj, lifetime) for simple temp lifetimes.
+- Don't spam >10k emitters — 11 corpus artifacts exceed 10k emitters and are perf outliers; keep counts small and bounded.
+
+PHYSICS & CONSTRAINTS (if you need them; not required for most BloxBench static builds)
+- Constraints connect via Attachments, not Parts. HingeConstraint, PrismaticConstraint, BallSocketConstraint, SpringConstraint, etc. — both Attachment0 and Attachment1 required or silently fails.
+- Vehicle wheels: HingeConstraint ActuatorType Motor/Servo with AngularVelocity/TargetAngle; suspension via SpringConstraint. Server-authoritative throttle/steer via validated RemoteEvent or InputAction + BindToSimulation under Server Authority.
+- Use RaycastParams + workspace:Raycast for hitscan, not Touched for fast projectiles.
+
+AUDIO (when requested)
+- Legacy: Sound parented to BasePart/Attachment (point) or SoundService/Workspace (global). Set SoundId="rbxassetid://ID", RollOffMode=InverseTapered, RollOffMinDistance/RollOffMaxDistance explicitly (default max is 10000). Play then Ended:Once(Destroy).
+- New modular: AudioPlayer -> Wire -> AudioEmitter/AudioDeviceOutput. Don't mix without intent.
+- Preload with ContentProvider:PreloadAsync.
+
+COMMON HALLUCINATIONS — DO NOT DO THESE
+- Part.Visible (no such property) -> BasePart.Transparency or GuiObject.Visible
+- Part.Size as number or Vector2 -> must be Vector3.new(x,y,z)
+- CFrame.new(x,y,z, lookAt) legacy two-vector -> use CFrame.lookAt(at, lookAt)
+- Enum.Material.Leaf / Enum.Material.Dirt (invented) -> valid Enum.Material list above
+- Enum.PartType.Cyclinder typo, or Part.Shape assignment wrong enum
+- ParticleEmitter.Attachment0 = somePart (read-only/does not exist) -> parent Emitter to Attachment
+- Sound:Play() without SoundId or with Volume>1 clipping without reason
+- Instance.new("Script").Source assignment from server context that never runs / forgetting RunContext=Client for camera logic
+- workspace.CurrentCamera.CFrame set from server Script -> must be client
+- BindableEvent:FireServer / RemoteEvent:FireServer confusion — BindableEvent fires locally via :Fire, RemoteEvent via :FireServer from client
+- FindFirstChild with wrong case or missing recursive true
+- Setting attribute with wrong type (boolean vs string) — check fixture: reward_visible is boolean, last_command is string, BloxBenchState is string enum
+- Hardcoding world coordinates far from origin without PivotTo -> floating point gaps
+
+BENCHMARK CONTRACT CONVENTIONS (authoritative for BloxBench — do not reinterpret)
+- Semantic components are Instance objects with EXACT names (e.g. BreakBounds, SceneRoot, RewardPanel, DisplayBounds, EffectBounds) placed inside the single top-level Model BloxBenchCandidate. Component is NOT an Attribute. Use Instance.new and Parent = model descendant. Checked via FindFirstChild(name, true).
+- Play/runtime fixtures use fixed keys the evaluator reads:
+  * BloxBenchCandidate:SetAttribute("BloxBenchState", stateString) — exact case-sensitive values named in the fixture (Intact/Damaged/Broken, Idle/Burst, etc.).
+  * BloxBenchRuntime Folder (or descendant) attributes: reward_visible, opening_visible, effect_active etc. as booleans via SetAttribute.
+  * BloxBenchTrace Folder (or descendant) attribute last_command (or last_event) as exact command string ("damage","break","reset","trigger",...) updated on every command.
+  Do not invent keys like State, Trace, RewardVisible.
+- Bounds instances (BreakBounds, SceneBounds, DisplayBounds, UiBounds, EffectBounds) declare the review footprint. Guidance (not a quality score): BreakBounds ~10-48 wide x 8-40 deep, SceneBounds 24-64 square, DisplayBounds 8-36 wide x 6-30 deep, UiBounds 8-40 wide x 2-28 deep, EffectBounds <=32 square. X/Z are floor footprint; Y/thickness can be small. Slightly outside is now a non-blocking warning, but staying inside keeps a fixed camera readable.
+- UI fixtures are world-space: WorldAnchor and UiBounds are Parts; RewardPanel/DayProgress/ClaimedState/AvailableState/PrimaryAction/CalendarIcon are GuiObjects (Frame/TextLabel/TextButton/ImageLabel) inside a BillboardGui or SurfaceGui whose Adornee is WorldAnchor. Do not make every UI semantic a Part.
+- Keep the candidate under the declared root instance and use exact semantic names from the fixture.
+- Expose only the narrow state/readback contract requested by the fixture. Do not add unrelated systems to inflate the artifact.
+
+MINIMAL CORRECT PATTERNS (copy structure, not names if fixture differs)
+-- creation + runtime contract skeleton
+local model = Instance.new("Model")
+model.Name = "BloxBenchCandidate"
+model.Parent = workspace
+local bounds = Instance.new("Part")
+bounds.Name = "DisplayBounds"
+bounds.Size = Vector3.new(24, 0.2, 18)
+bounds.CFrame = CFrame.new(0, 0.1, 0)
+bounds.Anchored = true
+bounds.Transparency = 1
+bounds.CanCollide = false
+bounds.Parent = model
+local runtime = Instance.new("Folder")
+runtime.Name = "BloxBenchRuntime"
+runtime.Parent = model
+runtime:SetAttribute("effect_active", false)
+local trace = Instance.new("Folder")
+trace.Name = "BloxBenchTrace"
+trace.Parent = model
+trace:SetAttribute("last_command", "none")
+local inputEvt = Instance.new("BindableEvent")
+inputEvt.Name = "VfxInput" -- or BreakInput per fixture
+inputEvt.Parent = model
+inputEvt.Event:Connect(function(cmd)
+    trace:SetAttribute("last_command", cmd)
+    if cmd == "trigger" then model:SetAttribute("BloxBenchState","Burst"); runtime:SetAttribute("effect_active", true)
+    elseif cmd == "reset" then model:SetAttribute("BloxBenchState","Idle"); runtime:SetAttribute("effect_active", false) end
+end)
+model:SetAttribute("BloxBenchState","Idle")
+-- BillboardGui UI pattern
+-- local bb = Instance.new("BillboardGui"); bb.Name="UI"; bb.Adornee=worldAnchor; bb.Size=UDim2.new(0,300,0,180); bb.StudsOffset=Vector3.new(0,3,0); bb.Parent=worldAnchor
+-- local panel = Instance.new("Frame"); panel.Name="RewardPanel"; panel.Size=UDim2.fromScale(1,1); panel.Parent=bb
+-- Particle burst pattern
+-- local att = Instance.new("Attachment"); att.Parent=emitterOriginPart
+-- local pe = Instance.new("ParticleEmitter"); pe.Rate=0; pe.Lifetime=NumberRange.new(0.3,0.5); pe.Speed=NumberRange.new(8,12); pe.Parent=att; pe:Emit(20)
+
+DO NOT ADD
+- External asset IDs, hidden teleports, extra top-level Models, fake score counters, unrelated gameplay loops, secrets in ReplicatedStorage, or marketplace/purchase code unless the fixture explicitly requests it.

@@ -53,11 +53,11 @@
     },
     "knowledge": [
       {
-        "content_sha256": "285bfb3c6492887d505fd9a445f0b4b8debe9829210ae54e4f2ecb7208a18686",
+        "content_sha256": "56bdae6a6384fe4dc8b9f51379629aa91bfeac78c278461a2e83b6f65b851dd8",
         "name": "roblox-core-v1",
         "path": "scripts/benchmark/knowledge/roblox-core-v1.txt",
-        "sha256": "8f51460a4331e990a7c31f5a3db5baef8b0b6d5739e8d528c7da755a90c0d9bb",
-        "system_prompt_sha256": "b7dae557727112920c11578faae7e8e6d23a80f479bde7d5d04bb883323d9630"
+        "sha256": "5dfc0f41ced2e8bb810feb36822c0278661d17fc2ce4f9bc631d931cf5360563",
+        "system_prompt_sha256": "abd4d17929ffd91e01744251e746270a4138185561b239da34b0885a609c03f1"
       }
     ],
     "models": {
@@ -83,7 +83,7 @@
     }
   },
   "schema": "bloxbench-benchmark-lock-v1",
-  "sha256": "5a3ca22f783d8f60f46323e4d44f024d2b9422faab9d25b677c8712678400a7d",
+  "sha256": "5a6d939252123eace5bf2f5e48e374f3ad9bbe6f60b7daa2886322e3d4faafd3",
   "suite": {
     "manifest": {
       "expected_task_count": 25,
