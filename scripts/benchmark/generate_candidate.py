@@ -122,10 +122,17 @@ Required semantic components (EXACT Instance names inside BloxBenchCandidate): {
 The evaluator will load your source as a ModuleScript and call these hooks
 when present: {", ".join(fixture.hooks) or "none"}.
 
+Your file MUST be a ModuleScript returning a table. Required shape:
+  local module = {{}}
+  function module.setup() ... create ONE Model named `{fixture.candidate_root}` and put ALL components inside it ... return model end
+  function module.cleanup() local m = workspace:FindFirstChild("{fixture.candidate_root}"); if m then m:Destroy() end end
+  return module
+Do NOT write bare top-level Instance.new outside module.setup() — the harness runs your source inside xpcall then require()s it as ReplicatedStorage._BloxBenchCandidateCode and calls module.setup(); bare code returns nil and fails with "Module code did not return exactly one value".
+
 The final build MUST:
-- create exactly one top-level Model named `{fixture.candidate_root}` in workspace and put ALL components inside it;
+- create exactly one top-level Model named `{fixture.candidate_root}` in workspace and put ALL components inside it (inside module.setup);
 - create an Instance for EVERY name in the required list above (Instance.new with the exact Name, not an Attribute);
-- for play fixtures, set attributes exactly as the prompt specifies (BloxBenchState on the model, booleans on the BloxBenchRuntime folder, last_command on BloxBenchTrace) and handle commands in a Script/LocalScript Source — not only in setup;
+- for play fixtures, set attributes exactly as the prompt specifies (BloxBenchState on the model, booleans on the BloxBenchRuntime folder, last_command on BloxBenchTrace) and handle commands in a Script/LocalScript Source placed inside the candidate — not only in setup;
 - use only supported Roblox classes and enums.
 
 Authoritative task prompt (follow this verbatim — it contains the exact attribute names, command strings, and envelope guidance):

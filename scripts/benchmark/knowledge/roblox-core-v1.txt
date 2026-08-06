@@ -106,35 +106,59 @@ BENCHMARK CONTRACT CONVENTIONS (authoritative for BloxBench — do not reinterpr
 - Expose only the narrow state/readback contract requested by the fixture. Do not add unrelated systems to inflate the artifact.
 
 MINIMAL CORRECT PATTERNS (copy structure, not names if fixture differs)
--- creation + runtime contract skeleton
-local model = Instance.new("Model")
-model.Name = "BloxBenchCandidate"
-model.Parent = workspace
-local bounds = Instance.new("Part")
-bounds.Name = "DisplayBounds"
-bounds.Size = Vector3.new(24, 0.2, 18)
-bounds.CFrame = CFrame.new(0, 0.1, 0)
-bounds.Anchored = true
-bounds.Transparency = 1
-bounds.CanCollide = false
-bounds.Parent = model
-local runtime = Instance.new("Folder")
-runtime.Name = "BloxBenchRuntime"
-runtime.Parent = model
-runtime:SetAttribute("effect_active", false)
-local trace = Instance.new("Folder")
-trace.Name = "BloxBenchTrace"
-trace.Parent = model
-trace:SetAttribute("last_command", "none")
-local inputEvt = Instance.new("BindableEvent")
-inputEvt.Name = "VfxInput" -- or BreakInput per fixture
-inputEvt.Parent = model
-inputEvt.Event:Connect(function(cmd)
-    trace:SetAttribute("last_command", cmd)
-    if cmd == "trigger" then model:SetAttribute("BloxBenchState","Burst"); runtime:SetAttribute("effect_active", true)
-    elseif cmd == "reset" then model:SetAttribute("BloxBenchState","Idle"); runtime:SetAttribute("effect_active", false) end
-end)
-model:SetAttribute("BloxBenchState","Idle")
+-- Your file MUST be a ModuleScript that returns a table. Put ALL creation inside function module.setup().
+-- Do NOT write bare top-level Instance.new outside a function — the evaluator loads your source as
+-- ReplicatedStorage._BloxBenchCandidateCode and calls module.setup() to build the candidate.
+local module = {}
+function module.setup()
+    local model = Instance.new("Model")
+    model.Name = "BloxBenchCandidate"
+    model.Parent = workspace
+    local bounds = Instance.new("Part")
+    bounds.Name = "DisplayBounds" -- or BreakBounds / SceneBounds / EffectBounds / UiBounds per fixture
+    bounds.Size = Vector3.new(24, 0.2, 18)
+    bounds.CFrame = CFrame.new(0, 0.1, 0)
+    bounds.Anchored = true
+    bounds.Transparency = 1
+    bounds.CanCollide = false
+    bounds.Parent = model
+    local runtime = Instance.new("Folder")
+    runtime.Name = "BloxBenchRuntime"
+    runtime.Parent = model
+    runtime:SetAttribute("effect_active", false) -- keys per fixture (reward_visible, opening_visible, effect_active...)
+    local trace = Instance.new("Folder")
+    trace.Name = "BloxBenchTrace"
+    trace.Parent = model
+    trace:SetAttribute("last_command", "none")
+    local inputEvt = Instance.new("BindableEvent")
+    inputEvt.Name = "VfxInput" -- or BreakInput per fixture
+    inputEvt.Parent = model
+    -- Runtime behavior MUST be in a Script/LocalScript Source inside the candidate, not only in setup.
+    -- This script runs in play; setup() alone does not observe commands in play.
+    local controller = Instance.new("Script")
+    controller.Name = "BloxBenchController"
+    controller.Parent = model
+    controller.Source = [[
+        local model = script.Parent
+        local runtime = model:FindFirstChild("BloxBenchRuntime", true)
+        local trace = model:FindFirstChild("BloxBenchTrace", true)
+        local input = model:FindFirstChild("VfxInput", true) -- or BreakInput
+        input.Event:Connect(function(cmd)
+            trace:SetAttribute("last_command", cmd)
+            if cmd == "trigger" then model:SetAttribute("BloxBenchState","Burst"); runtime:SetAttribute("effect_active", true)
+            elseif cmd == "reset" then model:SetAttribute("BloxBenchState","Idle"); runtime:SetAttribute("effect_active", false) end
+        end)
+        model:SetAttribute("BloxBenchState","Idle")
+    ]]
+    model:SetAttribute("BloxBenchState","Idle")
+    return model
+end
+function module.cleanup()
+    local model = workspace:FindFirstChild("BloxBenchCandidate")
+    if model then model:Destroy() end
+end
+return module
+
 -- BillboardGui UI pattern
 -- local bb = Instance.new("BillboardGui"); bb.Name="UI"; bb.Adornee=worldAnchor; bb.Size=UDim2.new(0,300,0,180); bb.StudsOffset=Vector3.new(0,3,0); bb.Parent=worldAnchor
 -- local panel = Instance.new("Frame"); panel.Name="RewardPanel"; panel.Size=UDim2.fromScale(1,1); panel.Parent=bb
